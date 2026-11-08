@@ -1,0 +1,42 @@
+<!-- @dsCard group="Patterns" height=820 subtitle="The full editor assembled from system components" page -->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;background:var(--bg-panel);color:var(--text-primary);font-family:var(--font-sans)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.col{display:grid;gap:16px}.trio{display:flex;gap:8px}.trio>*{flex:1;min-width:0}
+.lbl{font:500 13px/18px var(--font-sans);color:var(--text-secondary);margin:0 0 8px}
+.foot{background:linear-gradient(135deg,#2b2118,#6a4a2d 55%,#1a1410);border-radius:12px;position:relative}body{padding:20px;background:var(--bg-canvas)}</style></head><body><div id="r" class="sp"></div><script>
+const h=React.createElement,S=window.Spits;
+function Shell(){
+ const pps=14.4,W=75*pps,t=18;
+ const [playing,setPlaying]=React.useState(false);
+ return h('div',{style:{width:1280,height:800,display:'grid',gridTemplateRows:'56px 1fr auto',background:'var(--bg-app)',color:'var(--text-primary)',font:'400 14px/20px var(--font-sans)',overflow:'hidden',borderRadius:14,margin:'-20px'}},
+  h('header',{style:{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',padding:'0 16px'}},
+   h('div',{style:{display:'flex',alignItems:'center',gap:12}}, h(S.IconButton,{icon:'menu',label:'Main menu'}), h(S.Logo,{variant:'mark',height:28}), h('span',{style:{font:'600 14px/20px var(--font-sans)'}},'Surface launch cut')),
+   h('div',{style:{display:'flex',alignItems:'center',gap:4}}, h(S.IconButton,{icon:'select',label:'Select tool',active:true}), h(S.IconButton,{icon:'pan',label:'Pan tool',active:false}), h('span',{style:{width:1,height:20,background:'var(--border-subtle)',margin:'0 8px'}}), h(S.IconButton,{icon:'zoom-in',label:'Zoom canvas'}), h('span',{style:{font:'500 13px/18px var(--font-sans)',color:'var(--text-secondary)',padding:'0 8px'}},'100%'), h('span',{style:{width:1,height:20,background:'var(--border-subtle)',margin:'0 8px'}}), h(S.IconButton,{icon:'undo',label:'Undo'}), h(S.IconButton,{icon:'redo',label:'Redo'})),
+   h('div',{style:{display:'flex',alignItems:'center',gap:12,justifyContent:'flex-end'}}, h(S.AvatarStack,{people:[{name:'Amara Obi'},{name:'Tunde Adeyemi'}]}), h(S.IconButton,{icon:'share',label:'Share project'}), h(S.Button,{icon:'export'},'Export'))),
+  h('div',{style:{display:'grid',gridTemplateColumns:'56px 320px 1fr',gap:16,minHeight:0,padding:'0 16px 16px 0'}},
+   h(S.ToolRail,null, h(S.ToolRailItem,{icon:'add',label:'Add media',active:false}), h(S.ToolRailItem,{icon:'text',label:'Text',active:true}), h(S.ToolRailItem,{icon:'captions',label:'Captions',active:false}), h(S.ToolRailItem,{icon:'shapes',label:'Shapes',active:false}), h(S.ToolRailItem,{icon:'effects',label:'Effects',active:false}), h(S.ToolRailItem,{icon:'settings',label:'Settings',active:false}), h('span',{style:{flex:1}}), h(S.ToolRailItem,{icon:'help',label:'Help'})),
+   h('div',{style:{minHeight:0,overflow:'hidden'}}, h(S.Panel,{title:'Typography',onCollapse:function(){}},
+    h(S.PanelSection,null, h(S.Field,{label:'Text content',multiline:true,value:'*Some apps sold separately'})),
+    h(S.PanelSection,null,
+     h(S.PanelRow,{label:'Text'}, h(S.Select,{label:'Font family',value:'Hanken Grotesk',options:['Hanken Grotesk']}), h('div',{className:'trio'}, h(S.Field,{label:'Size',caption:'Size',value:'12',unit:'px'}), h(S.Field,{label:'Spacing',caption:'Spacing',value:'0',stepper:true}), h(S.Field,{label:'Line height',caption:'Height',value:'1.00',stepper:true}))),
+     h(S.PanelRow,{label:'Align'}, h(S.SegmentedControl,{label:'Text alignment',defaultValue:'right',options:[{value:'left',icon:'align-left',label:'Align left'},{value:'center',icon:'align-center',label:'Align center'},{value:'right',icon:'align-right',label:'Align right'},{value:'justify',icon:'align-justify',label:'Justify'}]})),
+     h(S.PanelRow,{label:'Color'}, h(S.ColorField,{label:'Text colour',value:'#E2CF23',opacity:60}))))),
+   h('div',{style:{position:'relative',background:'var(--bg-canvas)',borderRadius:16,display:'grid',placeItems:'center',overflow:'hidden'}},
+    h('div',{className:'foot',style:{position:'relative',width:560,height:315,overflow:'hidden'}},
+     h(S.SelectionBox,{x:300,y:14,width:230,height:26}, h('div',{style:{color:'#E2CF23',font:'400 13px/26px var(--font-sans)',textAlign:'right',paddingRight:6}},'*Some apps sold separately')),
+     h(S.CursorLabel,{name:'Amara Obi',color:'collab-1',style:{position:'absolute',left:40,top:150}}),
+     h('div',{style:{position:'absolute',left:0,right:0,bottom:16,textAlign:'center'}}, h(S.CaptionOverlay,null,'Turpis suspendisse sagittis viverra eros'))))),
+  h('div',{style:{background:'var(--bg-timeline)'}},
+   h(S.TransportBar,{playing:playing,onPlayPause:function(){setPlaying(!playing)}}),
+   h('div',{style:{display:'grid',gridTemplateColumns:'180px 1fr'}},
+    h('div',null, h('div',{style:{height:28,borderBottom:'1px solid var(--border-subtle)',background:'var(--bg-panel)'}}), ['Track 1','Track 2','Track 3','Track 4','Track 5'].map(function(n,i){return h(S.TrackHeader,{key:n,name:n,locked:i===0});})),
+    h('div',{style:{position:'relative',overflow:'hidden'}},
+     h(S.TimelineRuler,{seconds:75,pxPerSecond:pps,time:t}),
+     h(S.TrackLane,{width:W,label:'Track 1'}, h(S.Clip,{kind:'shape',label:'S\u2026',left:0,width:52}), h(S.Clip,{kind:'shape',label:'Shape',left:58,width:130})),
+     h(S.TrackLane,{width:W,label:'Track 2'}, h(S.Clip,{kind:'text',label:'Microsoft Surface for\u2026',left:58,width:130}), h(S.Clip,{kind:'text',label:'*Some a s\u2026',left:290,width:100,selected:true})),
+     h(S.TrackLane,{width:W,label:'Track 3'}, h(S.Clip,{kind:'caption',label:'Subtitles',left:190,width:640})),
+     h(S.TrackLane,{width:W,label:'Track 4'}, h(S.Clip,{kind:'video',label:'Video',left:190,width:640}), h(S.Clip,{kind:'video',label:'Video 2',left:838,width:230})),
+     h(S.TrackLane,{width:W,label:'Track 5'}, h(S.Clip,{kind:'audio',label:'Perfect Wave.mp3',left:0,width:830,seed:5}), h(S.Clip,{kind:'audio',label:'Ambient.mp3',left:838,width:230,seed:9})),
+     h(S.Playhead,{x:t*pps})))));
+}
+ReactDOM.createRoot(document.getElementById('r')).render(h(Shell));
+</script></body></html>
