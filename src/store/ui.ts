@@ -1,0 +1,107 @@
+/**
+ * Editor UI state that is not part of the saved project: playhead, playback,
+ * zoom, active tool and panel, selection, settings, and background job status.
+ */
+import { create } from "zustand";
+import type { Ms, Selection } from "../types/project";
+import { loadSettings, saveSettings, type Settings } from "../lib/settings";
+import type { KeyStatus, MotionProgress, Usage, WhisperStatus } from "../lib/ipc";
+
+export type PanelId = "media" | "clip" | "captions" | "motion" | "settings" | "help";
+export type Tool = "select" | "blade";
+
+export interface Notice {
+  tone: "info" | "success" | "warning" | "danger";
+  text: string;
+}
+
+export interface ExportState {
+  jobId: string;
+  phase: "frames" | "encoding" | "done" | "failed" | "cancelled";
+  progress: number;
+  outputPath: string;
+  error?: string;
+}
+
+interface UiState {
+  playheadMs: Ms;
+  playing: boolean;
+  pxPerSecond: number;
+  tool: Tool;
+  panel: PanelId;
+  selection: Selection;
+  settings: Settings;
+  liveMessage: string;
+  notice: Notice | null;
+  keyStatus: KeyStatus | null;
+  whisper: WhisperStatus | null;
+  transcribing: { assetId: string; jobId: string } | null;
+  motion: { requestId: string; progress: MotionProgress | null } | null;
+  lastUsage: Usage | null;
+  exportState: ExportState | null;
+  exportOpen: boolean;
+  downloads: Record<string, number>;
+  /** Clip whose chroma key colour the next canvas click will set. */
+  eyedropperClipId: string | null;
+  previewVolume: number;
+  speed: number;
+
+  setPlayhead: (ms: Ms) => void;
+  setPlaying: (v: boolean) => void;
+  setZoom: (px: number) => void;
+  setTool: (t: Tool) => void;
+  setPanel: (p: PanelId) => void;
+  select: (s: Selection) => void;
+  updateSettings: (patch: Partial<Settings>) => void;
+  announce: (msg: string) => void;
+  notify: (n: Notice | null) => void;
+  set: (patch: Partial<UiState>) => void;
+}
+
+export const ZOOM_MIN = 2;
+export const ZOOM_MAX = 120;
+export const ZOOM_DEFAULT = 15.6;
+
+export const useUi = create<UiState>((set, get) => ({
+  playheadMs: 0,
+  playing: false,
+  pxPerSecond: ZOOM_DEFAULT,
+  tool: "select",
+  panel: "media",
+  selection: null,
+  settings: loadSettings(),
+  liveMessage: "",
+  notice: null,
+  keyStatus: null,
+  whisper: null,
+  transcribing: null,
+  motion: null,
+  lastUsage: null,
+  exportState: null,
+  exportOpen: false,
+  downloads: {},
+  eyedropperClipId: null,
+  previewVolume: 0.8,
+  speed: 1,
+
+  setPlayhead: (ms) => set({ playheadMs: Math.max(0, Math.round(ms)) }),
+  setPlaying: (v) => {
+    if (v !== get().playing) set({ playing: v, liveMessage: v ? "Playing" : "Paused" });
+  },
+  setZoom: (px) => set({ pxPerSecond: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, px)) }),
+  setTool: (tool) => set({ tool, liveMessage: tool === "blade" ? "Blade tool. Click a clip to split it." : "Select tool" }),
+  setPanel: (panel) => set({ panel }),
+  select: (selection) => set({ selection }),
+  updateSettings: (patch) => {
+    const settings = { ...get().settings, ...patch };
+    saveSettings(settings);
+    set({ settings });
+  },
+  announce: (msg) => {
+    // Clear first so repeating the same message is announced again.
+    set({ liveMessage: "" });
+    queueMicrotask(() => set({ liveMessage: msg }));
+  },
+  notify: (notice) => set({ notice }),
+  set: (patch) => set(patch),
+}));

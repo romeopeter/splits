@@ -1,0 +1,12 @@
+<!-- @dsCard group="Inputs" height=250 subtitle="Text, number and multiline input with unit and caption" -->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;background:var(--bg-panel);color:var(--text-primary);font-family:var(--font-sans)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.col{display:grid;gap:16px}.trio{display:flex;gap:8px}.trio>*{flex:1;min-width:0}
+.lbl{font:500 13px/18px var(--font-sans);color:var(--text-secondary);margin:0 0 8px}
+.foot{background:linear-gradient(135deg,#2b2118,#6a4a2d 55%,#1a1410);border-radius:12px;position:relative}</style></head><body><div id="r" class="sp"></div><script>
+const h=React.createElement,S=window.Spits;
+
+ReactDOM.createRoot(document.getElementById('r')).render(h('div',{className:'col',style:{maxWidth:360}},
+ h('div',{className:'trio'}, h(S.Field,{label:'Size',caption:'Size',value:'12',unit:'px'}), h(S.Field,{label:'Spacing',caption:'Spacing',value:'0',stepper:true}), h(S.Field,{label:'Line height',caption:'Height',value:'1.00',stepper:true})),
+ h(S.Field,{label:'Text content',multiline:true,value:'*Some apps sold separately'}),
+ h(S.Field,{label:'Disabled field',value:'Locked track',disabled:true})));
+</script></body></html>
