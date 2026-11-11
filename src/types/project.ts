@@ -39,7 +39,7 @@ export interface Asset {
   peaks?: number[];
 }
 
-export type TrackKind = "motion" | "caption" | "video" | "audio";
+export type TrackKind = "motion" | "text" | "caption" | "video" | "audio";
 
 export interface Track {
   id: string;
@@ -164,6 +164,65 @@ export interface MotionClip {
   generatedAt: string;
 }
 
+/** How a text clip comes in or goes out. Durations are timeline ms, measured from the clip's ends. */
+export type TextAnimationKind = "none" | "fade" | "pop" | "rise" | "drop" | "typewriter";
+
+export interface TextAnimation {
+  kind: TextAnimationKind;
+  durationMs: Ms;
+}
+
+export type TextAlign = "left" | "center" | "right";
+/** None, one box behind the whole block, or one box behind each line (a highlighter look). */
+export type TextBackgroundShape = "none" | "block" | "lines";
+export type TextShadow = "none" | "soft" | "hard";
+
+/**
+ * How a text clip looks. Colours here are the person's content, not
+ * interface colours, so they are stored as `#RRGGBB` like the chroma key.
+ */
+export interface TextStyle {
+  /** A bundled font (`lib/fonts.ts`). */
+  fontId: string;
+  /** Font size as a fraction of canvas height. */
+  size: number;
+  /** Show the text in capitals without changing what was typed. */
+  caps: boolean;
+  /** Extra space between letters, as a fraction of the font size (-0.05..0.5). */
+  letterSpacing: number;
+  /** Line height as a multiple of the font size. */
+  lineHeight: number;
+  align: TextAlign;
+  color: string;
+  background: { shape: TextBackgroundShape; color: string; /** 0..1 */ opacity: number };
+  /** Outline width as a fraction of the font size; 0 = none. */
+  outline: { width: number; color: string };
+  shadow: { kind: TextShadow; color: string };
+}
+
+/**
+ * A title or label drawn over the video. Unlike captions and motion, text is
+ * placed in time by the person, not anchored to words.
+ */
+export interface TextClip {
+  id: string;
+  trackId: string;
+  startMs: Ms;
+  durationMs: Ms;
+  /** What was typed; `\n` starts a new line. */
+  text: string;
+  /** Centre of the text block, offset from the canvas centre, in project pixels. */
+  x: number;
+  y: number;
+  /** Degrees clockwise. */
+  rotation: number;
+  /** 0..1 */
+  opacity: number;
+  style: TextStyle;
+  animIn: TextAnimation;
+  animOut: TextAnimation;
+}
+
 export interface CaptionStyle {
   /** Font size as a fraction of canvas height. */
   size: number;
@@ -190,6 +249,7 @@ export interface Project {
   clips: Record<string, MediaClip>;
   transcripts: Record<string, Transcript>;
   motion: Record<string, MotionClip>;
+  texts: Record<string, TextClip>;
   captionStyle: CaptionStyle;
   /** Style prompts the person has used, most recent first. */
   motionStyles: string[];
@@ -199,4 +259,5 @@ export type Selection =
   | { kind: "clip"; id: string }
   | { kind: "segment"; assetId: string; segmentId: string }
   | { kind: "motion"; id: string }
+  | { kind: "text"; id: string }
   | null;

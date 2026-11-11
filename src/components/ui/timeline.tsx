@@ -36,9 +36,11 @@ export interface TrackHeaderProps {
    */
   onMove?: (dir: -1 | 1) => void;
   onGripPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** What the context menu acts on, such as "track:<id>" (see `contextMenus.ts`). */
+  menu?: string;
 }
 
-export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden, onDelete, muted, onToggleMuted, onMove, onGripPointerDown }: TrackHeaderProps) {
+export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden, onDelete, muted, onToggleMuted, onMove, onGripPointerDown, menu }: TrackHeaderProps) {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!onMove || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
     const onGrip = (e.target as HTMLElement).classList.contains("track-grip");
@@ -48,7 +50,7 @@ export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden
     onMove(e.key === "ArrowUp" ? -1 : 1);
   };
   return (
-    <div className="sp-track-head" role="group" aria-label={name} onKeyDown={onKeyDown}>
+    <div className="sp-track-head" role="group" aria-label={name} data-menu={menu} onKeyDown={onKeyDown}>
       {onMove ? (
         <button
           type="button"
@@ -124,6 +126,8 @@ export interface ClipProps {
   onKeyDown?: (e: KeyboardEvent<HTMLButtonElement>) => void;
   onClick?: () => void;
   style?: CSSProperties;
+  /** What the context menu acts on, such as "clip:<id>" (see `contextMenus.ts`). */
+  menu?: string;
 }
 
 export function Clip(p: ClipProps) {
@@ -134,6 +138,7 @@ export function Clip(p: ClipProps) {
       className={cx("sp-clip", `sp-clip--${css}`)}
       aria-pressed={!!p.selected}
       aria-label={p.ariaLabel ?? `${name} clip, ${p.label}`}
+      data-menu={p.menu}
       style={{ left: p.left, width: Math.max(p.width, 6), opacity: p.dimmed ? "var(--opacity-disabled)" : undefined, touchAction: "none", ...p.style }}
       onPointerDown={p.onPointerDown}
       onKeyDown={p.onKeyDown}

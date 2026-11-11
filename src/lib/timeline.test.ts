@@ -26,6 +26,7 @@ import {
   projectDuration,
   segmentsWithMotion,
   snap,
+  snapMove,
   splitClip,
   trackContents,
   trimClip,
@@ -304,6 +305,21 @@ describe("ripple and gaps", () => {
     expect(p.clips[clipId]!.startMs).toBe(0);
     expect(p.clips[b.clip.id]!.startMs).toBe(10_000);
     expect(closeGaps(p, videoTrack)).toBe(p);
+  });
+});
+
+describe("snapping a moved clip", () => {
+  it("snaps whichever edge is nearer a target, and leaves it alone when neither is", () => {
+    // A 3 s item dragged to 3.1 s: its start is 100 ms from the 3 s target, its end (6.1 s) is near nothing.
+    expect(snapMove(3100, 3000, [0, 3000], 200)).toBe(3000);
+    // Its end is 50 ms from 6 s, nearer than its start is to anything.
+    expect(snapMove(2950, 3000, [0, 2700, 6000], 400)).toBe(3000);
+    expect(snapMove(4000, 3000, [0, 3000], 200)).toBe(4000);
+  });
+
+  it("snaps a media clip's start to the playhead when dragged near it", () => {
+    const { p: p0, clipId } = setup();
+    expect(moveClip(p0, clipId, 2950, 100, 3000).clips[clipId]!.startMs).toBe(3000);
   });
 });
 

@@ -3,7 +3,7 @@
  *
  * 1. Resolve the project into Rust's `ExportRequest` (original source paths,
  *    bottom layer first).
- * 2. If there are captions or motion, render the overlay on an offscreen
+ * 2. If there are captions, text or motion, render the overlay on an offscreen
  *    canvas at the project size, one frame at a time, with the same
  *    caption and motion code the preview uses, and stream PNGs to Rust. Empty frames
  *    reuse one shared blank PNG.
@@ -14,6 +14,7 @@ import { useUi } from "../store/ui";
 import { newId } from "./ids";
 import * as ipc from "./ipc";
 import { LottieRegistry, ensureFonts } from "./lottie";
+import { loadTextFonts } from "./fonts";
 import { renderOverlayFrame } from "./overlay";
 import { clipAudible, clipsOnTrack, firstTrackOfKind, placeMotion, placedCaptions, projectDuration, videoTracksBottomUp } from "./timeline";
 import { frameToMs, msToFrame } from "./time";
@@ -82,7 +83,8 @@ function hasOverlay(p: Project): boolean {
   const mot = firstTrackOfKind(p, "motion");
   const captions = !!cap && !cap.hidden && placedCaptions(p).length > 0;
   const motion = !!mot && !mot.hidden && Object.values(p.motion).some((m) => !m.hidden && placeMotion(p, m).status !== "orphaned");
-  return captions || motion;
+  const text = p.tracks.some((t) => t.kind === "text" && !t.hidden && Object.values(p.texts).some((x) => x.trackId === t.id && x.text.trim()));
+  return captions || motion || text;
 }
 
 function toPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
@@ -92,7 +94,7 @@ function toPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 }
 
 async function renderOverlayFrames(p: Project, jobId: string, frameCount: number, isCancelled: () => boolean, onProgress: (f: number) => void) {
-  await ensureFonts();
+  await Promise.all([ensureFonts(), loadTextFonts()]);
   const canvas = document.createElement("canvas");
   canvas.width = p.settings.width;
   canvas.height = p.settings.height;

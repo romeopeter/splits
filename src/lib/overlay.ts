@@ -1,5 +1,6 @@
 /**
- * The overlay layer: captions and motion, drawn on a 2D canvas.
+ * The overlay layer: captions, text clips and motion, drawn on a 2D canvas.
+ * Order, bottom to top: captions, text tracks (lowest first), motion.
  *
  * One function, `renderOverlay`, serves both the preview (on screen, any
  * size) and export (an offscreen canvas at the project size, one PNG per
@@ -9,6 +10,7 @@ import type { Ms, Project } from "../types/project";
 import { firstTrackOfKind, placeMotion, placedCaptions, segmentsWithMotion, type PlacedCaption } from "./timeline";
 import { fpsValue } from "./time";
 import type { LottieRegistry } from "./lottie";
+import { drawTexts } from "./textRender";
 
 interface CaptionTokens {
   bg: string;
@@ -108,20 +110,22 @@ export function activeMotion(p: Project, t: Ms): { id: string; frame: number }[]
   return out;
 }
 
-/** Preview: captions on the canvas, motion as live SVG above it. */
+/** Preview: captions and text on the canvas, motion as live SVG above it. */
 export function renderOverlay(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, p: Project, t: Ms, lottie: LottieRegistry): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvasW, canvasH);
   drawCaptions(ctx, canvasW, canvasH, p, t);
+  drawTexts(ctx, canvasW, canvasH, p, t);
   lottie.showOnly(activeMotion(p, t));
 }
 
-/** Export: captions and motion flattened into one frame. Returns true when anything was drawn. */
+/** Export: captions, text and motion flattened into one frame. Returns true when anything was drawn. */
 export async function renderOverlayFrame(ctx: CanvasRenderingContext2D, p: Project, t: Ms, lottie: LottieRegistry): Promise<boolean> {
   const { width, height } = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
   let drew = drawCaptions(ctx, width, height, p, t);
+  drew = drawTexts(ctx, width, height, p, t) || drew;
   for (const m of activeMotion(p, t)) drew = (await lottie.rasterize(m.id, m.frame, ctx)) || drew;
   return drew;
 }

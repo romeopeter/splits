@@ -29,11 +29,15 @@ import { Info } from "@phosphor-icons/react/dist/csr/Info";
 import { List } from "@phosphor-icons/react/dist/csr/List";
 import { LockSimple } from "@phosphor-icons/react/dist/csr/LockSimple";
 import { LockSimpleOpen } from "@phosphor-icons/react/dist/csr/LockSimpleOpen";
+import { MagicWand } from "@phosphor-icons/react/dist/csr/MagicWand";
 import { MagnifyingGlassPlus } from "@phosphor-icons/react/dist/csr/MagnifyingGlassPlus";
 import { Microphone } from "@phosphor-icons/react/dist/csr/Microphone";
 import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
 import { MusicNotes } from "@phosphor-icons/react/dist/csr/MusicNotes";
+import { PaintBrush } from "@phosphor-icons/react/dist/csr/PaintBrush";
+import { Palette } from "@phosphor-icons/react/dist/csr/Palette";
 import { Pause } from "@phosphor-icons/react/dist/csr/Pause";
+import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PictureInPicture } from "@phosphor-icons/react/dist/csr/PictureInPicture";
 import { Play } from "@phosphor-icons/react/dist/csr/Play";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
@@ -49,6 +53,8 @@ import { Smiley } from "@phosphor-icons/react/dist/csr/Smiley";
 import { Sparkle } from "@phosphor-icons/react/dist/csr/Sparkle";
 import { SpeakerHigh } from "@phosphor-icons/react/dist/csr/SpeakerHigh";
 import { SpeakerSlash } from "@phosphor-icons/react/dist/csr/SpeakerSlash";
+import { SquaresFour } from "@phosphor-icons/react/dist/csr/SquaresFour";
+import { TextAa } from "@phosphor-icons/react/dist/csr/TextAa";
 import { TextAlignCenter } from "@phosphor-icons/react/dist/csr/TextAlignCenter";
 import { TextAlignJustify } from "@phosphor-icons/react/dist/csr/TextAlignJustify";
 import { TextAlignLeft } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
@@ -83,6 +89,13 @@ const ICONS = {
   pan: [Hand],
   split: [Scissors],
   trim: [ArrowsInLineHorizontal],
+  // Text panel tabs
+  edit: [PencilSimple],
+  presets: [SquaresFour],
+  font: [TextAa],
+  colour: [Palette],
+  style: [PaintBrush],
+  animation: [MagicWand],
   // Actions
   add: [Plus],
   plus: [Plus],

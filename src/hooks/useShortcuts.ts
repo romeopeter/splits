@@ -1,13 +1,14 @@
 /**
  * Global keyboard shortcuts: editor-patterns.md, plus B and V for tools,
  * Up and Down for edit points and Q and W for ripple trim (AGENTS.md,
- * open decision 3). Single-key shortcuts are ignored while typing in a
+ * open decision 3) and T to add text. Single-key shortcuts are ignored while typing in a
  * field (WCAG 2.1.4).
  */
 import { useEffect } from "react";
 import { useProject, getProject } from "../store/project";
 import { useUi } from "../store/ui";
 import {
+  addTextAtPlayhead,
   deleteSelection,
   duplicateSelection,
   jumpToEditPoint,
@@ -86,6 +87,11 @@ export function useShortcuts() {
           if ((e.target as HTMLElement | null)?.closest(UP_DOWN_OWNERS)) return;
           e.preventDefault();
           jumpToEditPoint(e.key === "ArrowUp" ? -1 : 1);
+          break;
+        case "t":
+        case "T":
+          e.preventDefault(); // the new text's editor takes focus; keep the T out of it
+          addTextAtPlayhead();
           break;
         case "q":
         case "Q":

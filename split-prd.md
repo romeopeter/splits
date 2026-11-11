@@ -45,7 +45,7 @@ All UI is built from the Split design system in [`split-design-system/`](split-d
 ## 🎨 1. UI/UX Interface Layout (4-Quadrant Workspace)
 Region sizes, spacing and behaviour come from [editor-patterns.md](split-design-system/editor-patterns.md) and the [EditorWorkspace](split-design-system/components/EditorWorkspace/) reference screen.
 
-> **As built (provisional, see Open decisions in AGENTS.md):** the workspace follows the design system: top bar, tool rail, inspector, canvas, transport, timeline. The media pool [A] is the **Media** panel in the rail; the rail holds Media, Clip, Audio, Captions and Motion, with Settings and Help at the bottom. Selecting a video clip opens Clip, in tabs: Edit (speed, transform, crop, commands) · Effects (fades) · Cutout (chroma key) · Audio. Selecting a clip on an audio track opens Audio: Audio · Edit. Timecode is `hh:mm:ss:ff`. `S` splits at the playhead and `B` is the blade tool. Up and Down jump between edit points; `Q` and `W` ripple trim. The planned layout for the next features is under "Inspector roadmap" below.
+> **As built (provisional, see Open decisions in AGENTS.md):** the workspace follows the design system: top bar, tool rail, inspector, canvas, transport, timeline. The media pool [A] is the **Media** panel in the rail; the rail holds Media, Clip, Text, Audio, Captions and Motion, with Settings and Help at the bottom. Selecting text opens Text: Text · Presets · Font · Colour · Style · Animation. Selecting a video clip opens Clip, in tabs: Edit (speed, transform, crop, commands) · Effects (fades) · Cutout (chroma key) · Audio. Selecting a clip on an audio track opens Audio: Audio · Edit. Timecode is `hh:mm:ss:ff`. `S` splits at the playhead and `B` is the blade tool. Up and Down jump between edit points; `Q` and `W` ripple trim; `T` adds text. The planned layout for the next features is under "Inspector roadmap" below.
 
 The app must render a fixed, non-scrolling desktop workspace divided into a **4-Quadrant Grid**:
 
@@ -114,7 +114,25 @@ The app must render a fixed, non-scrolling desktop workspace divided into a **4-
 * **Not yet:** colour adjustments, freeze frame, transitions, reverse, loudness normalisation and noise reduction.
 * See `learn/12-core-clip-edits.md`.
 
-### Inspector roadmap (planned, not built)
+### Feature C3: Text
+* **Requirement:** Titles and labels over the video, styled without leaving the editor, and exported exactly as previewed. The feature set follows Instagram Edits' text tools; the look follows the design system.
+* **Adding:**
+  * `T`, or Add text in the Text panel, adds a three-second text clip at the playhead with the cursor in it. Typing replaces the placeholder.
+  * Text is added on the first text track with room. If none has room, a new text track goes on top, so two titles can show at once.
+  * Any preset can start a new text clip.
+* **Text panel tabs:**
+  * Text: words, alignment, position, rotation, opacity, and the edit commands.
+  * Presets: eleven one-click looks.
+  * Font: ten bundled faces, size, letter and line spacing, capitals.
+  * Colour: text colour, background shape (lines or block), background colour and opacity.
+  * Style: outline and shadow.
+  * Animation: in and out (fade, pop, rise, drop, typewriter) with lengths.
+* **Canvas:** click text to select it, drag to move it, double-click to edit its words; arrow keys nudge (Shift for 10 px).
+* **Timeline:** text clips drag, trim, split, duplicate, delete, ripple delete and ripple trim like media clips, and appear in snapping and edit points.
+* **Rendering:** one 2D canvas renderer draws text in the preview and in the export's overlay frames, so they match. Fonts are bundled (Latin subset; other scripts fall back to a system font).
+* See `learn/14-text-clips.md`.
+
+### Inspector roadmap
 UX is first class (AGENTS.md rule 12). Decided 2026-11-11.
 
 * **Rail = things you add:** Media · Clip · Text · Emoji · Audio · Voice · Captions · Motion. Settings and Help sit at the bottom.
@@ -125,7 +143,7 @@ UX is first class (AGENTS.md rule 12). Decided 2026-11-11.
 | Video or image clip | Clip | Edit (speed, transform, crop, Blend for overlays) · Adjust · Effects · Cutout · Audio |
 | Audio clip | Audio | Audio · Edit |
 | Voice-over clip | Voice | Voice · Audio · Edit |
-| Text clip | Text | Text · Effects · Edit |
+| Text clip | Text | Text · Presets · Font · Colour · Style · Animation |
 | Emoji clip | Emoji | Emoji · Effects · Edit |
 
 * **Adjust:** Light · Colour (white balance) · HSL · Curves · Wheels · Looks, plus Compare (before and after) and Apply to all clips. All of these are colour-only, so they bake into one 3D LUT per clip. The WebGL preview samples it, and export runs it through FFmpeg `lut3d`.
@@ -143,7 +161,7 @@ UX is first class (AGENTS.md rule 12). Decided 2026-11-11.
 **Phases:**
 1. Edit shortcuts (done).
 2. Inspector restructure and Phosphor icons (done).
-3. Text and Emoji.
+3. Text (done) and Emoji.
 4. Audio and Voice.
 5. Adjust.
 6. Effects.
@@ -151,6 +169,8 @@ UX is first class (AGENTS.md rule 12). Decided 2026-11-11.
 8. Background removal.
 
 Each phase states its UX acceptance criteria and adds its `learn/` note.
+
+**Context menu.** The WebView's own right-click menu is replaced by the app's. Right-clicking a clip, text, motion clip, track header, lane or the canvas selects that item and lists its commands with their shortcuts. These are the same actions the inspector and keyboard use. Shift+F10 or the Menu key opens it for the focused item. Text fields keep the system menu (Cut, Copy, Paste). A selected clip or text on the canvas also shows a quick-delete button at its top-right corner.
 
 ### Feature D: Final Export Compilation
 * **Requirement:** Stitching all edits together into an optimized standalone `.mp4` file.

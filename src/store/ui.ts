@@ -7,11 +7,13 @@ import type { Ms, Selection } from "../types/project";
 import { loadSettings, saveSettings, type Settings } from "../lib/settings";
 import type { KeyStatus, MotionProgress, Usage, WhisperStatus } from "../lib/ipc";
 
-export type PanelId = "media" | "clip" | "audio" | "captions" | "motion" | "settings" | "help";
+export type PanelId = "media" | "clip" | "text" | "audio" | "captions" | "motion" | "settings" | "help";
 /** Tabs of the Clip panel (a clip on a video track). */
 export type ClipTab = "edit" | "effects" | "cutout" | "audio";
 /** Tabs of the Audio panel (a clip on an audio track). */
 export type AudioTab = "audio" | "edit";
+/** Tabs of the Text panel. */
+export type TextTab = "text" | "presets" | "font" | "colour" | "style" | "animation";
 export type Tool = "select" | "blade";
 
 export interface Notice {
@@ -36,6 +38,9 @@ interface UiState {
   /** The tab each panel last showed, kept while the person moves between clips. */
   clipTab: ClipTab;
   audioTab: AudioTab;
+  textTab: TextTab;
+  /** Bumped to ask the Text panel to focus its editor (after adding text, or a double-click on the canvas). */
+  textEditTick: number;
   selection: Selection;
   settings: Settings;
   liveMessage: string;
@@ -77,6 +82,8 @@ export const useUi = create<UiState>((set, get) => ({
   panel: "media",
   clipTab: "edit",
   audioTab: "audio",
+  textTab: "text",
+  textEditTick: 0,
   selection: null,
   settings: loadSettings(),
   liveMessage: "",

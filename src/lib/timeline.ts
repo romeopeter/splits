@@ -12,6 +12,7 @@ import type {
   Ms,
   Project,
   Segment,
+  TextClip,
   Track,
   TrackKind,
   Transcript,
@@ -19,6 +20,7 @@ import type {
   Word,
 } from "../types/project";
 import { newId } from "./ids";
+import { normalizeTextClip } from "./textStyle";
 import { DEFAULT_FPS, clamp, frameMs, snapToFrame } from "./time";
 
 export const MIN_CLIP_FRAMES = 2;
@@ -52,6 +54,7 @@ export function createProject(name = "Untitled project"): Project {
     clips: {},
     transcripts: {},
     motion: {},
+    texts: {},
     captionStyle: { size: 0.045, position: 0.82 },
     motionStyles: [],
   };
@@ -101,10 +104,15 @@ export function normalizeProject(p: Project): Project {
     };
   }
   const tracks = p.tracks.map((t) => ({ ...t, muted: t.muted ?? false }));
-  return { ...p, clips, tracks };
+  const texts: Record<string, TextClip> = {};
+  for (const [id, t] of Object.entries(p.texts ?? {})) texts[id] = normalizeTextClip(t);
+  return { ...p, clips, tracks, texts };
 }
 
 // ---------- Basic queries ----------
+
+/** Where a text clip ends on the timeline. */
+export const textEnd = (t: TextClip): Ms => t.startMs + t.durationMs;
 
 /** Timeline length: the source range played at the clip's speed. */
 export const clipLength = (c: MediaClip): Ms => Math.round((c.outMs - c.inMs) / c.speed);
@@ -300,6 +308,7 @@ export function segmentsWithMotion(p: Project): Set<string> {
 export function projectDuration(p: Project): Ms {
   let end = 0;
   for (const c of Object.values(p.clips)) end = Math.max(end, clipEnd(c));
+  for (const t of Object.values(p.texts)) end = Math.max(end, textEnd(t));
   for (const m of Object.values(p.motion)) {
     const pl = placeMotion(p, m);
     if (pl.status !== "orphaned") end = Math.max(end, pl.endMs);
@@ -314,6 +323,10 @@ export function snapTargets(p: Project, playheadMs: Ms, ignoreId?: string): Ms[]
   for (const c of Object.values(p.clips)) {
     if (c.id === ignoreId) continue;
     t.push(c.startMs, clipEnd(c));
+  }
+  for (const x of Object.values(p.texts)) {
+    if (x.id === ignoreId) continue;
+    t.push(x.startMs, textEnd(x));
   }
   return t;
 }
@@ -330,6 +343,23 @@ export function snap(value: Ms, targets: Ms[], threshold: Ms): Ms {
     }
   }
   return best;
+}
+
+/**
+ * Where a moved item of length `len` starts after snapping: whichever edge
+ * snaps by the smaller distance wins; when neither edge is near a target,
+ * the item stays where it was dropped.
+ *
+ * (An edge that did not snap must not count as "distance 0", or it would
+ * always beat the edge that did, and the start edge would never snap.)
+ */
+export function snapMove(startMs: Ms, len: Ms, targets: Ms[], threshold: Ms): Ms {
+  const sStart = snap(startMs, targets, threshold);
+  const sEnd = snap(startMs + len, targets, threshold) - len;
+  const dStart = sStart !== startMs ? Math.abs(sStart - startMs) : Infinity;
+  const dEnd = sEnd !== startMs ? Math.abs(sEnd - startMs) : Infinity;
+  if (dStart === Infinity && dEnd === Infinity) return startMs;
+  return dStart <= dEnd ? sStart : sEnd;
 }
 
 // ---------- Edits ----------
@@ -378,11 +408,7 @@ export function moveClip(p: Project, id: string, startMs: Ms, snapThreshold: Ms,
   if (!c) return p;
   const target = trackId ?? c.trackId;
   const len = clipLength(c);
-  const targets = snapTargets(p, playheadMs, id);
-  const sStart = snap(startMs, targets, snapThreshold);
-  const sEnd = snap(startMs + len, targets, snapThreshold) - len;
-  let next = Math.abs(sStart - startMs) <= Math.abs(sEnd - startMs) ? sStart : sEnd;
-  next = snapToFrame(Math.max(0, next), p.settings.fps);
+  const next = snapToFrame(Math.max(0, snapMove(startMs, len, snapTargets(p, playheadMs, id), snapThreshold)), p.settings.fps);
   if (overlaps(p, target, next, next + len, id)) return p;
   return withClip(p, { ...c, startMs: next, trackId: target });
 }
@@ -508,6 +534,11 @@ export function editPoints(p: Project): Ms[] {
     points.add(c.startMs);
     points.add(clipEnd(c));
   }
+  for (const x of Object.values(p.texts)) {
+    if (!visible.has(x.trackId)) continue;
+    points.add(x.startMs);
+    points.add(textEnd(x));
+  }
   return [...points].sort((a, b) => a - b);
 }
 
@@ -588,10 +619,10 @@ export function updateTrack(p: Project, id: string, patch: Partial<Track>): Proj
 // ---------- Tracks ----------
 
 /** Top-to-bottom order of track kinds (design system: overlays above subtitles above video above audio). */
-const KIND_RANK: Record<TrackKind, number> = { motion: 0, caption: 1, video: 2, audio: 3 };
-const KIND_NAME: Record<TrackKind, string> = { motion: "Motion", caption: "Captions", video: "Video", audio: "Audio" };
+const KIND_RANK: Record<TrackKind, number> = { motion: 0, text: 1, caption: 2, video: 3, audio: 4 };
+const KIND_NAME: Record<TrackKind, string> = { motion: "Motion", text: "Text", caption: "Captions", video: "Video", audio: "Audio" };
 
-/** "Motion" and "Captions" are single tracks; video and audio are numbered past the highest number in use. */
+/** "Motion" and "Captions" are single tracks; text, video and audio are numbered past the highest number in use. */
 function trackName(p: Project, kind: TrackKind): string {
   if (kind === "motion" || kind === "caption") return KIND_NAME[kind];
   const used = p.tracks.filter((t) => t.kind === kind).map((t) => Number(/ (\d+)$/.exec(t.name)?.[1] ?? 0));
@@ -599,14 +630,15 @@ function trackName(p: Project, kind: TrackKind): string {
 }
 
 /**
- * Insert a new track where its kind belongs. A new video track goes on top of
- * the other video tracks, because higher tracks draw over lower ones; every
- * other kind goes below the tracks of its own kind.
+ * Insert a new track where its kind belongs. A new video or text track goes
+ * on top of the others of its kind, because higher tracks draw over lower
+ * ones; every other kind goes below the tracks of its own kind.
  */
-function insertTrack(p: Project, kind: TrackKind): { project: Project; track: Track } {
+export function insertTrack(p: Project, kind: TrackKind): { project: Project; track: Track } {
   const track: Track = { id: newId("t"), kind, name: trackName(p, kind), locked: false, hidden: false, muted: false };
   const rank = KIND_RANK[kind];
-  let at = p.tracks.findIndex((t) => (kind === "video" ? KIND_RANK[t.kind] >= rank : KIND_RANK[t.kind] > rank));
+  const onTop = kind === "video" || kind === "text";
+  let at = p.tracks.findIndex((t) => (onTop ? KIND_RANK[t.kind] >= rank : KIND_RANK[t.kind] > rank));
   if (at < 0) at = p.tracks.length;
   const tracks = [...p.tracks];
   tracks.splice(at, 0, track);
@@ -631,8 +663,8 @@ export function placeAsset(p: Project, asset: Asset, startMs?: Ms): { project: P
 }
 
 /**
- * Remove a track and what sits on it: its media clips, or for the Motion
- * track its motion clips. Deleting the Captions track stops captions showing,
+ * Remove a track and what sits on it: its media clips, its text clips, or for
+ * the Motion track its motion clips. Deleting the Captions track stops captions showing,
  * but transcripts stay: motion anchors to their words, and the track can be
  * added back without transcribing again.
  */
@@ -640,7 +672,8 @@ export function deleteTrack(p: Project, id: string): Project {
   if (!trackById(p, id)) return p;
   const clips = Object.fromEntries(Object.entries(p.clips).filter(([, c]) => c.trackId !== id));
   const motion = Object.fromEntries(Object.entries(p.motion).filter(([, m]) => m.trackId !== id));
-  return { ...p, tracks: p.tracks.filter((t) => t.id !== id), clips, motion };
+  const texts = Object.fromEntries(Object.entries(p.texts).filter(([, t]) => t.trackId !== id));
+  return { ...p, tracks: p.tracks.filter((t) => t.id !== id), clips, motion, texts };
 }
 
 /** What deleting a track would remove, for the confirmation; null when it is empty. */
@@ -651,13 +684,17 @@ export function trackContents(p: Project, t: Track): string | null {
     const n = Object.values(p.motion).filter((m) => m.trackId === t.id).length;
     return n > 0 ? plural(n, "motion clip") : null;
   }
+  if (t.kind === "text") {
+    const n = Object.values(p.texts).filter((x) => x.trackId === t.id).length;
+    return n > 0 ? plural(n, "text clip") : null;
+  }
   const n = clipsOnTrack(p, t.id).length;
   return n > 0 ? plural(n, "clip") : null;
 }
 
 /**
  * Move a track one place up (-1) or down (+1) among tracks of its own kind.
- * Kinds keep their fixed order (motion, captions, video, audio), so a track
+ * Kinds keep their fixed order (motion, text, captions, video, audio), so a track
  * never crosses into another kind's group.
  */
 export function moveTrack(p: Project, id: string, dir: -1 | 1): Project {

@@ -3,7 +3,7 @@
  * Components call these instead of orchestrating IPC themselves.
  */
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import type { Asset, MediaClip, MotionClip, Ms, Project, Track, Transcript } from "../types/project";
+import type { Asset, MediaClip, MotionClip, Ms, Project, TextAnimation, TextStyle, Track, Transcript } from "../types/project";
 import { getProject, useProject } from "../store/project";
 import { useUi } from "../store/ui";
 import { newId } from "./ids";
@@ -28,8 +28,20 @@ import {
   splitClip,
   trackById,
   trackContents,
+  textEnd,
   trimClip,
 } from "./timeline";
+import {
+  addText,
+  deleteText,
+  duplicateText,
+  rippleDeleteText,
+  rippleTrimText,
+  splitText,
+  textAt,
+  trimText,
+  updateText,
+} from "./textClips";
 import { frameMs, msToFrame, timecode } from "./time";
 
 const ui = () => useUi.getState();
@@ -56,10 +68,11 @@ function aspectFor(w: number, h: number) {
 const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "aac", "flac", "ogg"];
 const MEDIA_EXTENSIONS = ["mp4", "mov", "m4v", "mkv", "webm", "avi", "mts", ...AUDIO_EXTENSIONS];
 
-export async function chooseAndImport(): Promise<void> {
+/** Add media from a file dialog; `atMs` places it at that time (the context menu's "Add media here"). */
+export async function chooseAndImport(opts: { atMs?: Ms } = {}): Promise<void> {
   const picked = await open({ multiple: true, filters: [{ name: "Video and audio", extensions: MEDIA_EXTENSIONS }] });
   if (!picked) return;
-  await importPaths(Array.isArray(picked) ? picked : [picked]);
+  await importPaths(Array.isArray(picked) ? picked : [picked], opts.atMs === undefined ? {} : { atMs: opts.atMs, select: true });
 }
 
 /**
@@ -311,6 +324,49 @@ export function panelForClip(p: Project, c: MediaClip): "clip" | "audio" {
   return trackById(p, c.trackId)?.kind === "audio" ? "audio" : "clip";
 }
 
+/** Select a text clip and open the Text panel. */
+export function selectText(id: string): void {
+  ui().select({ kind: "text", id });
+  ui().setPanel("text");
+}
+
+/**
+ * Add a text clip at the playhead (T, or the Text panel), select it, and ask
+ * the Text panel to focus its editor with the placeholder selected, so typing
+ * replaces it.
+ */
+export function addTextAtPlayhead(look: { style?: TextStyle; animIn?: TextAnimation } = {}, at?: { x: number; y: number }): void {
+  let id = "";
+  commit((p) => {
+    const r = addText(p, ui().playheadMs, look);
+    id = r.id;
+    // `at` is a centre offset in project pixels, as `TextClip.x`/`y` are (the canvas menu's "Add text here").
+    return at ? updateText(r.project, r.id, { x: Math.round(at.x), y: Math.round(at.y) }) : r.project;
+  });
+  if (!id) return;
+  selectText(id);
+  ui().set({ textTab: "text", textEditTick: ui().textEditTick + 1 });
+  ui().announce("Text added at the playhead. Type to replace it.");
+}
+
+/**
+ * The selected clip or text clip, as the edit commands see it: what it is,
+ * where it sits, and whether its track is locked.
+ */
+function selectedItem(): { kind: "clip" | "text"; id: string; trackId: string; startMs: Ms; endMs: Ms; locked: boolean } | null {
+  const s = ui().selection;
+  const p = getProject();
+  if (s?.kind === "clip") {
+    const c = p.clips[s.id];
+    return c ? { kind: "clip", id: c.id, trackId: c.trackId, startMs: c.startMs, endMs: clipEnd(c), locked: isLocked(p, c.trackId) } : null;
+  }
+  if (s?.kind === "text") {
+    const t = p.texts[s.id];
+    return t ? { kind: "text", id: t.id, trackId: t.trackId, startMs: t.startMs, endMs: textEnd(t), locked: isLocked(p, t.trackId) } : null;
+  }
+  return null;
+}
+
 /** Select a media clip and open its panel. */
 export function selectClip(id: string): void {
   const p = getProject();
@@ -322,31 +378,48 @@ export function selectClip(id: string): void {
 
 // ---------- Editing commands ----------
 
-/** Split the selected clip at the playhead, or every unlocked clip under it. */
+/** Split the selected clip or text at the playhead, or every unlocked clip and text under it. */
 export function splitAtPlayhead(): void {
-  const { playheadMs, selection } = ui();
+  const { playheadMs } = ui();
   const p = getProject();
-  const ids =
-    selection?.kind === "clip"
-      ? [selection.id]
-      : p.tracks.filter((t) => !t.locked && !t.hidden).map((t) => clipAt(p, t.id, playheadMs)?.id).filter((x): x is string => !!x);
-  if (ids.length === 0) {
+  const sel = selectedItem();
+  const visible = p.tracks.filter((t) => !t.locked && !t.hidden);
+  const items: { kind: "clip" | "text"; id: string }[] = sel
+    ? [sel]
+    : visible.flatMap((t): { kind: "clip" | "text"; id: string }[] => {
+        if (t.kind === "text") {
+          const x = textAt(p, t.id, playheadMs);
+          return x ? [{ kind: "text" as const, id: x.id }] : [];
+        }
+        const c = clipAt(p, t.id, playheadMs);
+        return c ? [{ kind: "clip" as const, id: c.id }] : [];
+      });
+  if (items.length === 0) {
     ui().announce("Nothing to split at the playhead.");
     return;
   }
   let did = 0;
   commit((proj) => {
     let next = proj;
-    for (const id of ids) {
-      const c = next.clips[id];
-      if (!c || isLocked(next, c.trackId)) continue;
-      const r = splitClip(next, id, playheadMs);
+    for (const it of items) {
+      const trackId = it.kind === "clip" ? next.clips[it.id]?.trackId : next.texts[it.id]?.trackId;
+      if (!trackId || isLocked(next, trackId)) continue;
+      const r = it.kind === "clip" ? splitClip(next, it.id, playheadMs) : splitText(next, it.id, playheadMs);
       if (r.rightId) did++;
       next = r.project;
     }
     return next;
   });
   ui().announce(did ? `Split ${did} clip${did === 1 ? "" : "s"}.` : "The playhead is at a clip edge; nothing to split.");
+}
+
+/** The blade tool on a text clip. */
+export function splitTextAt(id: string, atMs: number): void {
+  const p = getProject();
+  const t = p.texts[id];
+  if (!t || isLocked(p, t.trackId)) return;
+  commit((proj) => splitText(proj, id, atMs).project);
+  ui().announce("Split text.");
 }
 
 export function splitClipAt(id: string, atMs: number): void {
@@ -373,77 +446,74 @@ export function deleteSelection(): void {
       return { ...proj, motion };
     });
     ui().announce("Deleted motion clip.");
+  } else if (s.kind === "text") {
+    const t = p.texts[s.id];
+    if (!t || isLocked(p, t.trackId)) return;
+    commit((proj) => deleteText(proj, s.id));
+    ui().announce("Deleted text.");
   }
   ui().select(null);
 }
 
 export function duplicateSelection(): void {
-  const s = ui().selection;
-  if (s?.kind !== "clip") return;
-  let newSel: string | null = null;
+  const sel = selectedItem();
+  if (!sel || sel.locked) return;
+  let newId: string | null = null;
   commit((p) => {
-    const r = duplicateClip(p, s.id);
-    newSel = r.id;
+    const r = sel.kind === "clip" ? duplicateClip(p, sel.id) : duplicateText(p, sel.id);
+    newId = r.id;
     return r.project;
   });
-  if (newSel) ui().select({ kind: "clip", id: newSel });
+  if (newId) ui().select({ kind: sel.kind, id: newId });
 }
 
-/** `[` and `]`: trim the selected clip's start or end to the playhead. */
+/** `[` and `]`: trim the selected clip's or text's start or end to the playhead. */
 export function trimSelectionToPlayhead(edge: "start" | "end"): void {
-  const s = ui().selection;
-  if (s?.kind !== "clip") return;
+  const sel = selectedItem();
+  if (!sel || sel.locked) return;
   const t = ui().playheadMs;
-  commit((p) => {
-    const c = p.clips[s.id];
-    if (!c || isLocked(p, c.trackId)) return p;
-    if (t <= c.startMs || t >= clipEnd(c)) return p;
-    return trimClip(p, c.id, edge, t, 0, t);
-  });
+  if (t <= sel.startMs || t >= sel.endMs) return;
+  commit((p) => (sel.kind === "clip" ? trimClip(p, sel.id, edge, t, 0, t) : trimText(p, sel.id, edge, t, 0, t)));
 }
 
 /**
- * Q and W: trim the selected clip's start or end to the playhead and close
- * the gap, so later clips on its track move left. After a start trim the
- * playhead moves to the clip's start, which is where the cut now is.
+ * Q and W: trim the selected clip's or text's start or end to the playhead
+ * and close the gap, so later items on its track move left. After a start
+ * trim the playhead moves to the item's start, which is where the cut now is.
  */
 export function rippleTrimSelectionToPlayhead(edge: "start" | "end"): void {
-  const s = ui().selection;
-  if (s?.kind !== "clip") {
+  const sel = selectedItem();
+  if (!sel) {
     ui().announce("Select a clip to trim.");
     return;
   }
   const p = getProject();
-  const c = p.clips[s.id];
-  if (!c) return;
-  const track = trackById(p, c.trackId);
-  if (isLocked(p, c.trackId)) {
-    ui().announce(`${track?.name ?? "This track"} is locked. Unlock it to trim the clip.`);
+  if (sel.locked) {
+    ui().announce(`${trackById(p, sel.trackId)?.name ?? "This track"} is locked. Unlock it to trim the clip.`);
     return;
   }
-  const next = rippleTrimClip(p, c.id, edge, ui().playheadMs);
+  const t = ui().playheadMs;
+  const next = sel.kind === "clip" ? rippleTrimClip(p, sel.id, edge, t) : rippleTrimText(p, sel.id, edge, t);
   if (next === p) {
     ui().announce("Move the playhead inside the clip to trim it.");
     return;
   }
   commit(() => next);
-  if (edge === "start") ui().setPlayhead(c.startMs);
+  if (edge === "start") ui().setPlayhead(sel.startMs);
   ui().announce(edge === "start" ? "Trimmed the start and closed the gap." : "Trimmed the end and closed the gap.");
 }
 
-/** Shift+Delete: delete the selected clip and pull later clips on its track left into the gap. */
+/** Shift+Delete: delete the selected clip or text and pull later items on its track left into the gap. */
 export function rippleDeleteSelection(): void {
-  const s = ui().selection;
-  if (s?.kind !== "clip") {
+  const sel = selectedItem();
+  if (!sel) {
     deleteSelection();
     return;
   }
-  const p = getProject();
-  const c = p.clips[s.id];
-  if (!c || isLocked(p, c.trackId)) return;
-  commit((proj) => rippleDeleteClip(proj, s.id));
+  if (sel.locked) return;
+  commit((proj) => (sel.kind === "clip" ? rippleDeleteClip(proj, sel.id) : rippleDeleteText(proj, sel.id)));
   ui().select(null);
-  ui().announce("Deleted clip and closed the gap.");
+  ui().announce(sel.kind === "clip" ? "Deleted clip and closed the gap." : "Deleted text and closed the gap.");
 }
 
 /** Pack the clips on a track end to end from the start. */
@@ -512,7 +582,7 @@ function deleteDetail(t: Track, what: string): string {
   if (t.kind === "caption") {
     return "Captions stop showing on the video and in exports. The transcript is kept, so you can add the track back from the Captions panel.";
   }
-  if (t.kind === "motion") return `Its ${what} will be removed.`;
+  if (t.kind === "motion" || t.kind === "text") return `Its ${what} will be removed.`;
   return `Its ${what} will be removed from the timeline. The media stays in the project.`;
 }
 
@@ -539,6 +609,7 @@ export async function removeTrack(trackId: string): Promise<void> {
   if (
     (selection?.kind === "clip" && !after.clips[selection.id]) ||
     (selection?.kind === "motion" && !after.motion[selection.id]) ||
+    (selection?.kind === "text" && !after.texts[selection.id]) ||
     (selection?.kind === "segment" && t.kind === "caption")
   ) {
     ui().select(null);

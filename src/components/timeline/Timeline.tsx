@@ -6,6 +6,8 @@
  * - Caption clips are derived from transcript words; they follow the footage
  *   and cannot be dragged on their own.
  * - Motion clips follow their anchor word; dragging nudges `offsetMs`.
+ * - Text clips drag, trim and split like media clips, and move between text
+ *   tracks; they have no source, so they can be trimmed longer freely.
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
@@ -23,13 +25,15 @@ import {
   placeMotion,
   placedCaptions,
   projectDuration,
+  textEnd,
   trackById,
   trimClip,
   updateTrack,
 } from "../../lib/timeline";
-import { chooseAndImport, moveTrackBy, removeTrack, selectClip, splitClipAt } from "../../lib/actions";
+import { chooseAndImport, moveTrackBy, removeTrack, selectClip, selectText, splitClipAt, splitTextAt } from "../../lib/actions";
+import { moveText, textsOnTrack, trimText } from "../../lib/textClips";
 import { spokenTime, timecode } from "../../lib/time";
-import type { Asset, MediaClip, Track } from "../../types/project";
+import type { Asset, MediaClip, TextClip, Track } from "../../types/project";
 
 const HEADER = 180;
 const DRAG_THRESHOLD = 3;
@@ -179,6 +183,42 @@ export function Timeline() {
     );
   };
 
+  const onTextDown = (c: TextClip, e: RPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const locked = isLocked(getProject(), c.trackId);
+    if (tool === "blade") {
+      if (!locked) splitTextAt(c.id, msAt(e.clientX));
+      return;
+    }
+    selectText(c.id);
+    if (locked) return;
+    const start0 = c.startMs;
+    store().beginGesture();
+    drag(
+      e,
+      (dx, ev) => {
+        const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-track-id]");
+        const tid = under?.dataset.trackId;
+        const target = tid && trackById(getProject(), tid)?.kind === "text" && !isLocked(getProject(), tid) ? tid : undefined;
+        store().live((p) => moveText(p, c.id, start0 + (dx / px) * 1000, snapMs, ui().playheadMs, target));
+      },
+      (moved) => (moved ? store().endGesture() : store().cancelGesture()),
+    );
+  };
+
+  const onTextTrimDown = (c: TextClip, edge: "start" | "end", e: RPointerEvent<HTMLSpanElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isLocked(getProject(), c.trackId)) return;
+    store().beginGesture();
+    drag(
+      e,
+      (_dx, ev) => store().live((p) => trimText(p, c.id, edge, msAt(ev.clientX), snapMs, ui().playheadMs)),
+      (moved) => (moved ? store().endGesture() : store().cancelGesture()),
+    );
+  };
+
   const onMotionDown = (id: string, e: RPointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     ui().select({ kind: "motion", id });
@@ -248,6 +288,29 @@ export function Timeline() {
         );
       });
     }
+    if (t.kind === "text") {
+      return textsOnTrack(project, t.id).map((c) => {
+        const label = c.text.split("\n")[0]?.trim() || "Empty text";
+        return (
+          <Clip
+            key={c.id}
+            kind="text"
+            label={label}
+            left={(c.startMs / 1000) * px}
+            width={(c.durationMs / 1000) * px}
+            selected={selection?.kind === "text" && selection.id === c.id}
+            dimmed={dim}
+            trimmable={!t.locked}
+            ariaLabel={`Text clip, ${label}, ${timecode(c.startMs, fps)} to ${timecode(textEnd(c), fps)}`}
+            style={tool === "blade" ? { cursor: "crosshair" } : undefined}
+            menu={`text:${c.id}`}
+            onPointerDown={(e) => onTextDown(c, e)}
+            onClick={() => tool === "select" && selectText(c.id)}
+            onTrimPointerDown={(edge, e) => onTextTrimDown(c, edge, e)}
+          />
+        );
+      });
+    }
     if (t.kind === "motion") {
       return Object.values(project.motion).map((m) => {
         const pl = placeMotion(project, m);
@@ -265,6 +328,7 @@ export function Timeline() {
             dimmed={dim || m.hidden}
             status={pl.status === "out_of_sync" ? { icon: "warning", text: "Out of sync" } : undefined}
             ariaLabel={`Motion clip, ${label}${pl.status === "out_of_sync" ? ", out of sync" : ""}, ${timecode(pl.startMs, fps)} to ${timecode(pl.endMs, fps)}`}
+            menu={`motion:${m.id}`}
             onPointerDown={(e) => onMotionDown(m.id, e)}
             onClick={() => {
               ui().select({ kind: "motion", id: m.id });
@@ -298,6 +362,7 @@ export function Timeline() {
           status={a.proxy.status === "failed" ? { icon: "alert", text: "Not ready" } : undefined}
           ariaLabel={`${a.hasVideo && t.kind === "video" ? "Video" : "Audio"} clip, ${name}, ${timecode(c.startMs, fps)} to ${timecode(clipEnd(c), fps)}`}
           style={tool === "blade" ? { cursor: "crosshair" } : undefined}
+          menu={`clip:${c.id}`}
           onPointerDown={(e) => onMediaDown(c, e)}
           onClick={() => {
             if (tool !== "select") return;
@@ -354,6 +419,7 @@ export function Timeline() {
                   onToggleMuted={media ? () => toggle(t, "muted") : undefined}
                   onMove={movable ? (dir) => moveTrackBy(t.id, dir) : undefined}
                   onGripPointerDown={movable ? (e) => onGripDown(t, e) : undefined}
+                  menu={`track:${t.id}`}
                 />
               </div>
               <div data-track-id={t.id}>

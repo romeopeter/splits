@@ -3,7 +3,7 @@
  * Markup and class names match `split-design-system/components/bundle.css`,
  * so the system's CSS styles them unchanged.
  */
-import { useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { Icon, type IconName } from "./Icon";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -32,6 +32,8 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   icon: IconName;
   /** Required: becomes `aria-label` and the tooltip. Name the object ("Lock Track 2"). */
   label: string;
+  /** React 19 passes `ref` as a prop; it lands on the button. */
+  ref?: Ref<HTMLButtonElement>;
   size?: Size;
   /** Makes it a toggle (`aria-pressed`). */
   active?: boolean;

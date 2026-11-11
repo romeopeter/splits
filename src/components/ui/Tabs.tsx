@@ -12,10 +12,14 @@
  * reach on a long tab.
  */
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { Icon, type IconName } from "./Icon";
 
 export interface TabItem<T extends string> {
   id: T;
+  /** The tab's name. With an icon, it becomes the accessible name and tooltip. */
   text: string;
+  /** Show an icon instead of the name, for panels with more tabs than fit as words. */
+  icon?: IconName;
 }
 
 export interface TabsProps<T extends string> {
@@ -66,9 +70,11 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, header, c
                 aria-controls={panelId}
                 tabIndex={on ? 0 : -1}
                 className="sp-seg__item"
+                aria-label={t.icon ? t.text : undefined}
+                title={t.icon ? t.text : undefined}
                 onClick={() => onChange(t.id)}
               >
-                {t.text}
+                {t.icon ? <Icon name={t.icon} size={18} /> : t.text}
               </button>
             );
           })}

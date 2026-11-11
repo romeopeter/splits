@@ -41,6 +41,7 @@ Not sources of truth:
 | Playback | HTML5 `<canvas>` (WebGL) fed by 720p proxy files or frames |
 | Captions | `whisper.cpp` with word-level timestamps, `tiny.en` bundled, larger models as optional downloads |
 | Motion | Lottie JSON through lottie-web's light SVG build (no expression engine): live SVG in preview, rasterised into PNG overlay frames for export |
+| Text | Text clips drawn on the 2D overlay canvas by one renderer for preview and export, with bundled Fontsource fonts (licences in `public/licenses/fonts/`) |
 | AI motion | Claude Messages API over HTTPS + SSE from Rust (no official Rust SDK); default model `claude-opus-5-5`; key in the OS keychain |
 | Chroma key | WebGL fragment shader in preview; equivalent FFmpeg filter on export |
 | State | One JSON timeline tree, serialised locally and shared between React and Rust. Transcripts are per asset, with stable word IDs |
@@ -51,7 +52,7 @@ Not sources of truth:
 src-tauri/            Rust: commands, engine (parser, proxy, transcribe, exporter), ai (Claude client, motion validation), secrets, timeline state
 src/                  React app
   components/ui/      Split design-system components rebuilt in React, plus Tabs and the Phosphor icon table
-  components/inspector/  The rail's panels; clip/ holds the Clip and Audio panels' shared tabs
+  components/inspector/  The rail's panels; clip/ holds the Clip and Audio panels' shared tabs, text/ the Text panel's tabs
   components/motion/  Motion panel, Lottie layer
   components/         MediaPool, PreviewPlayer, Timeline, Inspector (composed from ui/)
   hooks/  types/
@@ -160,6 +161,7 @@ Provisional defaults (chosen 2026-11-08 to get version 1 running; awaiting the u
    - `S` splits at the playhead (design system), and `B` switches to the blade tool, which splits where you click (spec). `V` returns to the select tool.
    - Up and Down jump the playhead to the previous or next edit point.
    - `Q` and `W` ripple trim the selected clip's start or end to the playhead and close the gap.
+   - `T` adds text at the playhead and puts the cursor in it.
 
    Up and Down keep their own meaning on sliders, radio groups, the canvas, a track grip, the inspector and dialogs.
 4. **Collaboration.** Out of scope for version 1. Avatar, AvatarStack and CursorLabel are not ported.
@@ -168,7 +170,11 @@ Still open:
 
 5. **Motion track colour.** The design system has no motion clip kind. Motion uses `clip-shape` for now. A dedicated `clip-motion` token, with its edge and contrast checks, would need adding to the design system.
 6. **No-key fallback.** Without a Claude key, motion is unavailable. Built-in offline Lottie templates filled from the transcript could fill that gap later.
-7. **Inspector tabs.** The design system has no Tabs component. `src/components/ui/Tabs.tsx` uses the SegmentedControl's look with `tablist`/`tab` semantics (automatic activation). A Tabs component in the design system would replace it.
+7. **Inspector tabs and menus.** The design system has no Tabs or Menu component.
+   - `src/components/ui/Tabs.tsx` uses the SegmentedControl's look with `tablist`/`tab` semantics (automatic activation).
+   - `src/components/ui/Menu.tsx` (the Project menu and the right-click menu) uses the system's menu surface rules (`bg-raised`, `radius-lg`, `shadow-md`) with `menu`/`menuitem` semantics.
+
+   Components in the design system would replace both.
 
 Settled:
 
@@ -184,6 +190,12 @@ Settled:
 - 2026-11-11: **Icons are Phosphor** (`@phosphor-icons/react`, regular weight; transport glyphs filled), replacing the design system's icon set in every place, so the app keeps one icon family.
 - 2026-11-11: **Muted-track icon** (was open decision 7) is Phosphor's speaker-slash (`volume-off`), replacing the struck-through volume icon.
 - 2026-11-11: **Background removal** comes to Cutout in a later phase. It runs on the device, with a model the person chooses to download. Chroma key ships first.
+- 2026-11-11: **Text clips** (phase 3).
+  - They live on text tracks, between Motion and Captions.
+  - They are placed in time by the person, not anchored to words.
+  - They are drawn by one canvas renderer (`src/lib/textRender.ts`) for preview and export.
+  - The Text panel follows Instagram Edits' text tools as a feature direction, not a visual one: Text, Presets, Font, Colour, Style and Animation.
+  - Fonts are bundled from Fontsource (Latin subset), so text looks the same on every OS.
 - 2026-11-11: The design system is rebranded **Split** too. `split-design-system/` replaces `spits-design-system/`, and the wordmark reads "Split".
 
 ## Working conventions

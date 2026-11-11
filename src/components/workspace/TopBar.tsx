@@ -1,24 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProject } from "../../store/project";
 import { useUi } from "../../store/ui";
-import { Button, IconButton, Logo, Select } from "../ui";
+import { Button, IconButton, Logo, Menu, Select, type MenuEntry } from "../ui";
 import { ASPECTS, aspectOf } from "../../lib/actions";
 import { createProject } from "../../lib/timeline";
 import { exportLottieFiles } from "../../lib/export";
 import * as ipc from "../../lib/ipc";
 import type { Project } from "../../types/project";
 
-function ProjectMenu({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
+function ProjectMenu({ onClose, anchor }: { onClose: () => void; anchor: RefObject<HTMLButtonElement | null> }) {
   const [projects, setProjects] = useState<ipc.ProjectSummary[]>([]);
   useEffect(() => {
     ipc.projectList().then(setProjects).catch(() => {});
-    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
-    window.addEventListener("pointerdown", away);
-    return () => window.removeEventListener("pointerdown", away);
-  }, [onClose]);
+  }, []);
 
   const current = useProject.getState().project.id;
   const openProject = async (id: string) => {
@@ -28,11 +23,9 @@ function ProjectMenu({ onClose }: { onClose: () => void }) {
       const { ensureProxies } = await import("../../lib/actions");
       ensureProxies(p);
     }
-    onClose();
   };
 
   const exportLottie = async () => {
-    onClose();
     const dir = await open({ directory: true, title: "Choose a folder for the Lottie files" });
     if (typeof dir !== "string") return;
     try {
@@ -43,48 +36,26 @@ function ProjectMenu({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return (
-    <div
-      ref={ref}
-      className="menu"
-      role="menu"
-      aria-label="Project"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-          const items = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
-          const i = items.indexOf(document.activeElement as HTMLButtonElement);
-          items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
-          e.preventDefault();
-        }
-      }}
-    >
-      <button
-        role="menuitem"
-        className="menu__item"
-        onClick={() => {
-          useProject.getState().load(createProject());
-          useUi.getState().select(null);
-          useUi.getState().setPlayhead(0);
-          onClose();
-        }}
-      >
-        New project
-      </button>
-      <button role="menuitem" className="menu__item" disabled={Object.keys(useProject.getState().project.motion).length === 0} onClick={() => void exportLottie()}>
-        Export Lottie files…
-      </button>
-      {projects.filter((p) => p.id !== current).length > 0 && <div className="menu__label">Recent projects</div>}
-      {projects
-        .filter((p) => p.id !== current)
-        .slice(0, 8)
-        .map((p) => (
-          <button key={p.id} role="menuitem" className="menu__item" onClick={() => void openProject(p.id)}>
-            {p.name}
-          </button>
-        ))}
-    </div>
-  );
+  const recent = projects.filter((p) => p.id !== current).slice(0, 8);
+  const entries: MenuEntry[] = [
+    {
+      label: "New project",
+      onSelect: () => {
+        useProject.getState().load(createProject());
+        useUi.getState().select(null);
+        useUi.getState().setPlayhead(0);
+      },
+    },
+    {
+      label: "Export Lottie files…",
+      disabled: Object.keys(useProject.getState().project.motion).length === 0,
+      hint: "Generate motion first.",
+      onSelect: () => void exportLottie(),
+    },
+    ...(recent.length > 0 ? [{ kind: "label" as const, label: "Recent projects" }] : []),
+    ...recent.map((p) => ({ label: p.name, onSelect: () => void openProject(p.id) })),
+  ];
+  return <Menu label="Project" entries={entries} onClose={onClose} anchor={anchor} returnFocus={anchor.current} />;
 }
 
 export function TopBar() {
@@ -93,14 +64,15 @@ export function TopBar() {
   const canRedo = useProject((s) => s.future.length > 0);
   const tool = useUi((s) => s.tool);
   const [menu, setMenu] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const mod = navigator.platform.toLowerCase().includes("mac") ? "Cmd" : "Ctrl";
 
   return (
     <header className="topbar">
       <div className="topbar__group">
         <div style={{ position: "relative" }}>
-          <IconButton icon="menu" label="Project menu" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} />
-          {menu && <ProjectMenu onClose={() => setMenu(false)} />}
+          <IconButton ref={menuButton} icon="menu" label="Project menu" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} />
+          {menu && <ProjectMenu anchor={menuButton} onClose={() => setMenu(false)} />}
         </div>
         <Logo variant="mark" height={24} />
         <input

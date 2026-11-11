@@ -7,11 +7,13 @@ import { useUi, type PanelId, ZOOM_MAX, ZOOM_MIN } from "./store/ui";
 import { Icon, IconButton, ToolRail, ToolRailItem, TransportBar, type IconName } from "./components/ui";
 import { TopBar } from "./components/workspace/TopBar";
 import { ExportDialog } from "./components/workspace/ExportDialog";
+import { ContextMenu } from "./components/workspace/ContextMenu";
 import { Preview } from "./components/preview/Preview";
 import { Timeline } from "./components/timeline/Timeline";
 import { MediaPanel } from "./components/inspector/MediaPanel";
 import { ClipPanel } from "./components/inspector/ClipPanel";
 import { AudioPanel } from "./components/inspector/AudioPanel";
+import { TextPanel } from "./components/inspector/TextPanel";
 import { CaptionsPanel } from "./components/inspector/CaptionsPanel";
 import { MotionPanel } from "./components/motion/MotionPanel";
 import { SettingsPanel } from "./components/inspector/SettingsPanel";
@@ -24,11 +26,12 @@ import { spokenTime, timecode } from "./lib/time";
 
 /**
  * The rail holds things you add; selecting something opens its panel
- * (AGENTS.md, UX standards). Text, Emoji and Voice join as their phases land.
+ * (AGENTS.md, UX standards). Emoji and Voice join as their phases land.
  */
 const TOOLS: { id: PanelId; icon: IconName; label: string }[] = [
   { id: "media", icon: "media", label: "Media" },
   { id: "clip", icon: "video", label: "Clip" },
+  { id: "text", icon: "text", label: "Text" },
   { id: "audio", icon: "audio", label: "Audio" },
   { id: "captions", icon: "captions", label: "Captions" },
   { id: "motion", icon: "motion", label: "Motion" },
@@ -40,6 +43,8 @@ function Inspector({ panel }: { panel: PanelId }) {
       return <MediaPanel />;
     case "clip":
       return <ClipPanel />;
+    case "text":
+      return <TextPanel />;
     case "audio":
       return <AudioPanel />;
     case "captions":
@@ -78,7 +83,7 @@ function Transport() {
         ui.setPlaying(!playing);
       }}
       onSplit={splitAtPlayhead}
-      splitDisabled={Object.keys(project.clips).length === 0}
+      splitDisabled={Object.keys(project.clips).length === 0 && Object.keys(project.texts).length === 0}
       onStart={() => ui.setPlayhead(0)}
       onEnd={() => ui.setPlayhead(total)}
       onZoom={ui.setZoom}
@@ -136,6 +141,7 @@ export default function App() {
         <Timeline />
       </div>
       <ExportDialog />
+      <ContextMenu />
       <div className="sr-only" aria-live="polite" role="status">
         {live}
       </div>

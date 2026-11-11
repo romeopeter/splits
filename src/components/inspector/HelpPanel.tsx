@@ -5,6 +5,7 @@ const mod = navigator.platform.toLowerCase().includes("mac") ? "Cmd" : "Ctrl";
 const SHORTCUTS: [string, string][] = [
   ["Play or pause", "Space"],
   ["Split at playhead", "S"],
+  ["Add text at playhead", "T"],
   ["Blade tool (click a clip to split)", "B"],
   ["Select tool", "V"],
   ["Step one frame", "Left or Right"],
@@ -22,6 +23,7 @@ const SHORTCUTS: [string, string][] = [
   ["Zoom timeline in or out", "+ or −"],
   ["Fit timeline", "Shift + 0"],
   ["Nudge canvas object", "Arrow keys, Shift for 10 px"],
+  ["Menu for the focused clip, track or canvas", "Shift + F10 or Menu key"],
   ["Deselect", "Escape"],
 ];
 

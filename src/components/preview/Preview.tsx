@@ -14,14 +14,19 @@
  * key press or click unlocks the elements that are not unlocked yet.
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { useProject, getProject } from "../../store/project";
 import { useUi } from "../../store/ui";
 import { Compositor, framePointAt, layerGeometry } from "../../lib/compositor";
 import { LottieRegistry, ensureFonts } from "../../lib/lottie";
 import { renderOverlay } from "../../lib/overlay";
 import { Playback, elementKey } from "../../lib/playback";
-import { clipAt, clipEnd, fadeGain, projectDuration, trackById, updateClip, videoTracksBottomUp } from "../../lib/timeline";
+import { clipAt, clipEnd, fadeGain, isLocked, projectDuration, textEnd, trackById, updateClip, videoTracksBottomUp } from "../../lib/timeline";
+import { loadTextFonts } from "../../lib/fonts";
+import { updateText } from "../../lib/textClips";
+import { textAtPoint, textBox } from "../../lib/textRender";
+import { deleteSelection, selectText } from "../../lib/actions";
+import { IconButton } from "../ui";
 import type { Project } from "../../types/project";
 
 /** Elements already started inside a user gesture (see the file comment). */
@@ -138,6 +143,7 @@ export function Preview() {
     const octx = oc.getContext("2d")!;
     const lottie = new LottieRegistry(motionLayer.current);
     void ensureFonts();
+    void loadTextFonts();
     let raf = 0;
     let last = performance.now();
     const playback = new Playback();
@@ -188,41 +194,130 @@ export function Preview() {
   const pxH = Math.min(H, Math.round(box.h * dpr));
   const scale = box.w / W;
 
-  // Selected video clip under the playhead gets a selection box you can drag.
+  // The selected video clip or text under the playhead gets a selection box you can drag.
   const playhead = useUi((s) => s.playheadMs);
   const selClip = selection?.kind === "clip" ? project.clips[selection.id] : undefined;
   const selAsset = selClip && project.assets[selClip.assetId];
   const selOnVideo = selClip && trackById(project, selClip.trackId)?.kind === "video";
-  const selVisible = selClip && selOnVideo && selAsset?.hasVideo && playhead >= selClip.startMs && playhead < clipEnd(selClip);
-  const geom = selVisible && selAsset ? layerGeometry(selAsset.width ?? 16, selAsset.height ?? 9, selClip.transform, selClip.crop, W, H) : null;
-  const rect = geom?.rect;
+  const clipVisible = !!(selClip && selOnVideo && selAsset?.hasVideo && playhead >= selClip.startMs && playhead < clipEnd(selClip));
+  const geom = clipVisible && selClip && selAsset ? layerGeometry(selAsset.width ?? 16, selAsset.height ?? 9, selClip.transform, selClip.crop, W, H) : null;
+  const selText = selection?.kind === "text" ? project.texts[selection.id] : undefined;
+  const textVisible = !!(selText && !trackById(project, selText.trackId)?.hidden && playhead >= selText.startMs && playhead < textEnd(selText));
+  const tbox = textVisible && selText ? textBox(selText, W, H) : null;
+  const selVisible = clipVisible || textVisible;
+  /** The selection box in project pixels, before rotation. */
+  const rect = geom?.rect ?? (tbox ? { x: tbox.cx - tbox.w / 2, y: tbox.cy - tbox.h / 2, w: tbox.w, h: tbox.h } : null);
+  const rotation = selClip && clipVisible ? selClip.transform.rotation : (tbox?.rotation ?? 0);
 
-  const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
-  const onBoxDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (!selClip) return;
+  const selLocked = (clipVisible && selClip && isLocked(project, selClip.trackId)) || (textVisible && selText && isLocked(project, selText.trackId));
+  /**
+   * Where the quick-delete button goes, in frame pixels: just outside the
+   * box's top-right corner (whichever corner is top-right on screen once
+   * rotated), pulled inside the frame when the box fills it.
+   */
+  const deleteAt = (() => {
+    if (!rect || eyedropper || selLocked) return null;
+    const a = (rotation * Math.PI) / 180;
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + rect.h / 2;
+    const corners = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ].map(([sx, sy]) => {
+      const lx = (sx! * rect.w) / 2;
+      const ly = (sy! * rect.h) / 2;
+      return { x: (cx + lx * Math.cos(a) - ly * Math.sin(a)) * scale, y: (cy + lx * Math.sin(a) + ly * Math.cos(a)) * scale };
+    });
+    const tr = corners.reduce((best, c) => (c.x - c.y > best.x - best.y ? c : best));
+    const edge = 16; // half the button plus a small gap
+    return { left: Math.min(Math.max(tr.x + 12, edge), box.w - edge), top: Math.min(Math.max(tr.y - 12, edge), box.h - edge) };
+  })();
+
+  /** Move the selected item to (x, y), live during a drag or committed for a nudge. */
+  const moveSelected = (x: number, y: number, live: boolean) => {
+    const st = useProject.getState();
+    const apply = live ? st.live : st.commit;
+    if (selClip && clipVisible) apply((p) => updateClip(p, selClip.id, { transform: { ...selClip.transform, x, y } }));
+    else if (selText && textVisible) apply((p) => updateText(p, selText.id, { x, y }));
+  };
+
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const projectPoint = (e: MouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+  };
+  const inRect = (x: number, y: number) => {
+    if (!rect) return false;
+    const a = (-rotation * Math.PI) / 180;
+    const dx = x - (rect.x + rect.w / 2);
+    const dy = y - (rect.y + rect.h / 2);
+    return Math.abs(dx * Math.cos(a) - dy * Math.sin(a)) <= rect.w / 2 && Math.abs(dx * Math.sin(a) + dy * Math.cos(a)) <= rect.h / 2;
+  };
+  const startDrag = (e: PointerEvent<HTMLDivElement>, ox: number, oy: number) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, tx: selClip.transform.x, ty: selClip.transform.y };
+    drag.current = { x: e.clientX, y: e.clientY, ox, oy };
     useProject.getState().beginGesture();
   };
-  const onBoxMove = (e: PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d || !selClip) return;
-    const x = Math.round(d.tx + (e.clientX - d.x) / scale);
-    const y = Math.round(d.ty + (e.clientY - d.y) / scale);
-    useProject.getState().live((p) => updateClip(p, selClip.id, { transform: { ...selClip.transform, x, y } }));
+
+  /**
+   * Pointer down on the canvas: the eyedropper picks a colour; otherwise a
+   * press on the selected box drags it, and a press on any text selects that
+   * text and drags it.
+   */
+  const onFrameDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (eyedropper) {
+      onCanvasClick(e);
+      return;
+    }
+    const pt = projectPoint(e);
+    const p = getProject();
+    if (selClip && clipVisible && inRect(pt.x, pt.y)) {
+      if (!isLocked(p, selClip.trackId)) startDrag(e, selClip.transform.x, selClip.transform.y);
+      return;
+    }
+    const hit = textAtPoint(p, useUi.getState().playheadMs, pt.x, pt.y);
+    if (hit) {
+      selectText(hit.id);
+      if (!isLocked(p, hit.trackId)) startDrag(e, hit.x, hit.y);
+    }
   };
-  const onBoxUp = () => {
+  const onFrameMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    // The selection may have just changed to the text under the pointer, so read it fresh.
+    const s = useUi.getState().selection;
+    const x = Math.round(d.ox + (e.clientX - d.x) / scale);
+    const y = Math.round(d.oy + (e.clientY - d.y) / scale);
+    if (s?.kind === "text") useProject.getState().live((p) => updateText(p, s.id, { x, y }));
+    else moveSelected(x, y, true);
+  };
+  const onFrameUp = () => {
+    if (!drag.current) return;
     drag.current = null;
     useProject.getState().endGesture();
   };
+  /** Double-click text to edit its words in the Text panel. */
+  const onFrameDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    const pt = projectPoint(e);
+    const hit = textAtPoint(getProject(), useUi.getState().playheadMs, pt.x, pt.y);
+    if (!hit) return;
+    selectText(hit.id);
+    const ui = useUi.getState();
+    ui.set({ textTab: "text", textEditTick: ui.textEditTick + 1 });
+  };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!selClip || !selVisible) return;
+    if (!selVisible || !rect) return;
     const step = e.shiftKey ? 10 : 1;
     const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
     if (!d) return;
     e.preventDefault();
     e.stopPropagation();
-    useProject.getState().commit((p) => updateClip(p, selClip.id, { transform: { ...selClip.transform, x: selClip.transform.x + d[0]!, y: selClip.transform.y + d[1]! } }));
+    const p = getProject();
+    if (selClip && clipVisible && !isLocked(p, selClip.trackId)) moveSelected(selClip.transform.x + d[0]!, selClip.transform.y + d[1]!, false);
+    else if (selText && textVisible && !isLocked(p, selText.trackId)) moveSelected(selText.x + d[0]!, selText.y + d[1]!, false);
   };
 
   // Eyedropper: sample the clip being keyed, at the pointer.
@@ -255,17 +350,21 @@ export function Preview() {
     useUi.getState().announce(`Key colour set to ${hex}.`);
   };
 
-  const empty = Object.keys(project.clips).length === 0;
+  const empty = Object.keys(project.clips).length === 0 && Object.keys(project.texts).length === 0;
 
   return (
     <div ref={wrapRef} className="preview-area">
       <div
         className="preview-frame"
         style={{ width: box.w, height: box.h, cursor: eyedropper ? "crosshair" : undefined }}
-        onPointerDown={onCanvasClick}
+        onPointerDown={onFrameDown}
+        onPointerMove={onFrameMove}
+        onPointerUp={onFrameUp}
+        onPointerCancel={onFrameUp}
+        onDoubleClick={onFrameDoubleClick}
         tabIndex={selVisible ? 0 : -1}
         onKeyDown={onKey}
-        aria-label={selVisible ? "Canvas. Arrow keys move the selected clip." : "Canvas"}
+        aria-label={selVisible ? `Canvas. Arrow keys move the selected ${selText && textVisible ? "text" : "clip"}.` : "Canvas"}
         role="group"
       >
         <canvas ref={videoCanvas} width={pxW} height={pxH} style={{ width: box.w, height: box.h }} aria-hidden="true" />
@@ -279,18 +378,30 @@ export function Preview() {
               top: rect.y * scale,
               width: rect.w * scale,
               height: rect.h * scale,
-              transform: selClip?.transform.rotation ? `rotate(${selClip.transform.rotation}deg)` : undefined,
+              transform: rotation ? `rotate(${rotation}deg)` : undefined,
               cursor: "move",
               touchAction: "none",
             }}
-            onPointerDown={onBoxDown}
-            onPointerMove={onBoxMove}
-            onPointerUp={onBoxUp}
           >
-            {(["tl", "tm", "tr", "ml", "mr", "bl", "bm", "br"] as const).map((k) => (
-              <span key={k} className={`sp-sel__h sp-sel__h--${k}`} aria-hidden="true" />
-            ))}
+            {/* Resize handles only on clips: text is sized from the Font tab, so handles would promise a drag that does nothing. */}
+            {clipVisible &&
+              (["tl", "tm", "tr", "ml", "mr", "bl", "bm", "br"] as const).map((k) => <span key={k} className={`sp-sel__h sp-sel__h--${k}`} aria-hidden="true" />)}
           </div>
+        )}
+        {deleteAt && (
+          <IconButton
+            className="sel-delete"
+            icon="close"
+            size="sm"
+            iconSize={14}
+            label={selText && textVisible ? "Delete text" : "Delete clip"}
+            title={selText && textVisible ? "Delete text (Delete)" : "Delete clip (Delete)"}
+            style={deleteAt}
+            // Its own press: not a drag of the box underneath, nor a double-click into the text.
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={deleteSelection}
+          />
         )}
         {empty && (
           <div className="preview-empty">
