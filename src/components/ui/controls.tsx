@@ -4,7 +4,7 @@
  * so the system's CSS styles them unchanged.
  */
 import { useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -13,8 +13,8 @@ type Size = "sm" | "md" | "lg";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "danger";
   size?: Size;
-  icon?: string;
-  iconEnd?: string;
+  icon?: IconName;
+  iconEnd?: IconName;
 }
 
 export function Button({ variant = "primary", size = "md", icon, iconEnd, children, className, type, ...rest }: ButtonProps) {
@@ -29,7 +29,7 @@ export function Button({ variant = "primary", size = "md", icon, iconEnd, childr
 }
 
 export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
-  icon: string;
+  icon: IconName;
   /** Required: becomes `aria-label` and the tooltip. Name the object ("Lock Track 2"). */
   label: string;
   size?: Size;
@@ -148,7 +148,7 @@ export function Select({ label, value, options, onChange, disabled, id, classNam
 
 export interface SegmentedControlProps {
   label: string;
-  options: { value: string; icon?: string; text?: string; label?: string }[];
+  options: { value: string; icon?: IconName; text?: string; label?: string }[];
   value: string;
   onChange: (value: string) => void;
 }

@@ -27,7 +27,7 @@ function typing(t: EventTarget | null): boolean {
 }
 
 /** Places where Up and Down keep their own meaning. */
-const UP_DOWN_OWNERS = "[role=slider], [role=radio], [role=listbox], [role=option], select, .preview-frame, .track-grip, .inspector, [role=dialog]";
+const UP_DOWN_OWNERS = "[role=slider], [role=radio], [role=tab], [role=listbox], [role=option], select, .preview-frame, .track-grip, .inspector, [role=dialog]";
 
 export function useShortcuts() {
   useEffect(() => {
@@ -70,7 +70,8 @@ export function useShortcuts() {
           break;
         case "ArrowLeft":
         case "ArrowRight": {
-          if ((e.target as HTMLElement | null)?.closest("[role=slider], .preview-frame")) return;
+          // Sliders, radio groups and tabs move their own value with Left and Right.
+          if ((e.target as HTMLElement | null)?.closest("[role=slider], [role=radio], [role=tab], .preview-frame")) return;
           e.preventDefault();
           const dir = e.key === "ArrowLeft" ? -1 : 1;
           if (e.shiftKey) ui.setPlayhead(ui.playheadMs + dir * 1000);

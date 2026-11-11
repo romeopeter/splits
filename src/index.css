@@ -150,16 +150,27 @@ textarea {
   padding-right: var(--space-16);
 }
 
+/*
+ * The rail scrolls when the window is too short for every item, so Settings
+ * and Help at the bottom stay reachable instead of being cut off.
+ */
 .rail-wrap {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* Keyboard focus scrolls an item into view with room for its focus ring. */
+  scroll-padding-block: var(--space-8);
   background: var(--bg-app);
 }
 
 .rail-bottom {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
   padding: var(--space-8);
 }
 
@@ -648,7 +659,7 @@ textarea {
 /*
  * Delete track, and Mute while the track is not muted: revealed on hover or
  * when focus is inside the header (see TrackHeader), so the name keeps its
- * room at rest. A muted track always shows its struck-through mute button.
+ * room at rest. A muted track always shows its mute button, with the volume-off icon.
  */
 .sp-track-head .track-delete,
 .sp-track-head .track-mute:not(.track-mute--on) {
@@ -663,23 +674,35 @@ textarea {
 }
 
 /*
- * Muted track: the design system has no "volume off" icon, so the volume icon
- * is struck through like the eye-off icon (a shape cue, not colour alone).
- * The stroke matches the icon set: 1.5px, current colour.
+ * Inspector tabs (src/components/ui/Tabs.tsx). The look is the design
+ * system's SegmentedControl; these rules add the selected state for
+ * `aria-selected` (the segmented control keys off `aria-checked`), keep the
+ * bar in view while the panel scrolls, and restore the divider above the
+ * first section inside the tab panel, which the adjacent-section rule
+ * cannot see across the wrapper.
  */
-.sp-track-head .track-mute--on {
-  position: relative;
+.sp-tabs__bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-canvas);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.sp-track-head .track-mute--on::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 18px;
-  height: 1.5px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  pointer-events: none;
+.sp-tabs__list .sp-seg__item {
+  padding: 0 var(--space-4);
+}
+
+.sp-tabs__list .sp-seg__item[aria-selected="true"] {
+  background: var(--bg-field-selected);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.sp-tabs__list .sp-seg__item[aria-selected="true"]:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-focus);
+}
+
+.sp-tabs__panel > .sp-panel__section:first-child {
+  border-top: 0;
 }

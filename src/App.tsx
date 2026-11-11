@@ -4,13 +4,14 @@
  */
 import { useProject } from "./store/project";
 import { useUi, type PanelId, ZOOM_MAX, ZOOM_MIN } from "./store/ui";
-import { Icon, IconButton, ToolRail, ToolRailItem, TransportBar } from "./components/ui";
+import { Icon, IconButton, ToolRail, ToolRailItem, TransportBar, type IconName } from "./components/ui";
 import { TopBar } from "./components/workspace/TopBar";
 import { ExportDialog } from "./components/workspace/ExportDialog";
 import { Preview } from "./components/preview/Preview";
 import { Timeline } from "./components/timeline/Timeline";
 import { MediaPanel } from "./components/inspector/MediaPanel";
 import { ClipPanel } from "./components/inspector/ClipPanel";
+import { AudioPanel } from "./components/inspector/AudioPanel";
 import { CaptionsPanel } from "./components/inspector/CaptionsPanel";
 import { MotionPanel } from "./components/motion/MotionPanel";
 import { SettingsPanel } from "./components/inspector/SettingsPanel";
@@ -21,12 +22,16 @@ import { splitAtPlayhead } from "./lib/actions";
 import { projectDuration } from "./lib/timeline";
 import { spokenTime, timecode } from "./lib/time";
 
-const TOOLS: { id: PanelId; icon: string; label: string }[] = [
-  { id: "media", icon: "add", label: "Media" },
+/**
+ * The rail holds things you add; selecting something opens its panel
+ * (AGENTS.md, UX standards). Text, Emoji and Voice join as their phases land.
+ */
+const TOOLS: { id: PanelId; icon: IconName; label: string }[] = [
+  { id: "media", icon: "media", label: "Media" },
   { id: "clip", icon: "video", label: "Clip" },
+  { id: "audio", icon: "audio", label: "Audio" },
   { id: "captions", icon: "captions", label: "Captions" },
-  { id: "motion", icon: "effects", label: "Motion" },
-  { id: "settings", icon: "settings", label: "Settings" },
+  { id: "motion", icon: "motion", label: "Motion" },
 ];
 
 function Inspector({ panel }: { panel: PanelId }) {
@@ -35,6 +40,8 @@ function Inspector({ panel }: { panel: PanelId }) {
       return <MediaPanel />;
     case "clip":
       return <ClipPanel />;
+    case "audio":
+      return <AudioPanel />;
     case "captions":
       return <CaptionsPanel />;
     case "motion":
@@ -85,7 +92,7 @@ function Transport() {
 function NoticeBar() {
   const notice = useUi((s) => s.notice);
   if (!notice) return null;
-  const icon = { info: "info", success: "check", warning: "warning", danger: "alert" }[notice.tone];
+  const icon = ({ info: "info", success: "check", warning: "warning", danger: "alert" } as const)[notice.tone];
   return (
     <div className={`notice notice--${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
       <Icon name={icon} size={20} />
@@ -112,6 +119,7 @@ export default function App() {
             ))}
           </ToolRail>
           <div className="rail-bottom">
+            <ToolRailItem icon="settings" label="Settings" active={panel === "settings"} onClick={() => useUi.getState().setPanel("settings")} />
             <ToolRailItem icon="help" label="Help and shortcuts" active={panel === "help"} onClick={() => useUi.getState().setPanel("help")} />
           </div>
         </nav>

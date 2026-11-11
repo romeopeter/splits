@@ -50,7 +50,8 @@ Not sources of truth:
 ```
 src-tauri/            Rust: commands, engine (parser, proxy, transcribe, exporter), ai (Claude client, motion validation), secrets, timeline state
 src/                  React app
-  components/ui/      Split design-system components rebuilt in React
+  components/ui/      Split design-system components rebuilt in React, plus Tabs and the Phosphor icon table
+  components/inspector/  The rail's panels; clip/ holds the Clip and Audio panels' shared tabs
   components/motion/  Motion panel, Lottie layer
   components/         MediaPool, PreviewPlayer, Timeline, Inspector (composed from ui/)
   hooks/  types/
@@ -69,7 +70,7 @@ learn/                Engineering learning notes (see below)
 2. **Keep heavy media out of the WebView.** Rust handles decoding, proxies, audio extraction and export. React gets cache paths, frames or PCM buffers, never raw 4K sources.
 3. **Originals stay untouched.** Editing and playback use proxies; only export reads the original high-res paths.
 4. **Cross-platform paths.** Use Tauri path APIs (`BaseDirectory::AppData` and similar). No hard-coded or OS-specific paths.
-5. **Design-system fidelity.** Use only token variables for colour, spacing, radius, shadow, type and z-index. No raw hex values and no Tailwind default palette. Use only one icon family: the Split icon set today, replaced by Phosphor in phase 2 of the inspector roadmap (see "Open decisions", settled 2026-11-11). Never remove `shadow-focus`. Never convey state or clip kind by colour alone.
+5. **Design-system fidelity.** Use only token variables for colour, spacing, radius, shadow, type and z-index. No raw hex values and no Tailwind default palette. Use only one icon family: Phosphor, through `Icon` and its name table in `src/components/ui/Icon.tsx` (settled 2026-11-11). Never remove `shadow-focus`. Never convey state or clip kind by colour alone.
 6. **Accessibility.** Every canvas and timeline action has a keyboard path, per `accessibility.md` and `editor-patterns.md`.
 7. **Time is integer and frame-accurate.** Store time in integer units (ms or frames at a known rate), never floats in seconds, so splits and exports land on exact frames.
 8. **Word-anchored timing.** Captions and motion clips refer to transcript word IDs, and their positions are derived from those words. Editing a word's text keeps its ID and timing.
@@ -167,7 +168,7 @@ Still open:
 
 5. **Motion track colour.** The design system has no motion clip kind. Motion uses `clip-shape` for now. A dedicated `clip-motion` token, with its edge and contrast checks, would need adding to the design system.
 6. **No-key fallback.** Without a Claude key, motion is unavailable. Built-in offline Lottie templates filled from the transcript could fill that gap later.
-7. **Muted-track icon.** The design system has no "volume off" icon. A muted track shows the `volume` icon struck through by CSS, pressed, with an "Unmute" label; Mute shows on hover or focus like Delete. A dedicated icon would need adding to the design system.
+7. **Inspector tabs.** The design system has no Tabs component. `src/components/ui/Tabs.tsx` uses the SegmentedControl's look with `tablist`/`tab` semantics (automatic activation). A Tabs component in the design system would replace it.
 
 Settled:
 
@@ -180,7 +181,8 @@ Settled:
   - Video effects (Fade, Animation, Styles, Outline) are the Effects tab.
 
   The phased roadmap is in `split-prd.md` under "Inspector roadmap".
-- 2026-11-11: **Icons are Phosphor** (`@phosphor-icons/react`), replacing the design system's icon set in every place, so the app keeps one icon family. Done in phase 2 of the roadmap; until then the Split icons stay.
+- 2026-11-11: **Icons are Phosphor** (`@phosphor-icons/react`, regular weight; transport glyphs filled), replacing the design system's icon set in every place, so the app keeps one icon family.
+- 2026-11-11: **Muted-track icon** (was open decision 7) is Phosphor's speaker-slash (`volume-off`), replacing the struck-through volume icon.
 - 2026-11-11: **Background removal** comes to Cutout in a later phase. It runs on the device, with a model the person chooses to download. Chroma key ships first.
 - 2026-11-11: The design system is rebranded **Split** too. `split-design-system/` replaces `spits-design-system/`, and the wordmark reads "Split".
 

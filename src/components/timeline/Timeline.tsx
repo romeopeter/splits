@@ -27,7 +27,7 @@ import {
   trimClip,
   updateTrack,
 } from "../../lib/timeline";
-import { chooseAndImport, moveTrackBy, removeTrack, splitClipAt } from "../../lib/actions";
+import { chooseAndImport, moveTrackBy, removeTrack, selectClip, splitClipAt } from "../../lib/actions";
 import { spokenTime, timecode } from "../../lib/time";
 import type { Asset, MediaClip, Track } from "../../types/project";
 
@@ -150,8 +150,7 @@ export function Timeline() {
       if (!locked) splitClipAt(c.id, msAt(e.clientX));
       return;
     }
-    ui().select({ kind: "clip", id: c.id });
-    ui().setPanel("clip"); // editor-patterns: selecting a clip opens its panel
+    selectClip(c.id); // editor-patterns: selecting a clip opens its panel
     if (locked) return;
     const start0 = c.startMs;
     const kind = trackById(getProject(), c.trackId)?.kind;
@@ -302,8 +301,7 @@ export function Timeline() {
           onPointerDown={(e) => onMediaDown(c, e)}
           onClick={() => {
             if (tool !== "select") return;
-            ui().select({ kind: "clip", id: c.id });
-            ui().setPanel("clip");
+            selectClip(c.id);
           }}
           onTrimPointerDown={(edge, e) => onTrimDown(c, edge, e)}
         />

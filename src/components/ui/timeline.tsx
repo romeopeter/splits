@@ -5,7 +5,7 @@
  */
 import { useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { IconButton } from "./controls";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -70,7 +70,7 @@ export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden
       </span>
       {onToggleMuted && (
         <IconButton
-          icon="volume"
+          icon={muted ? "volume-off" : "volume"}
           label={`${muted ? "Unmute" : "Mute"} ${name}`}
           active={!!muted}
           size="sm"
@@ -96,7 +96,7 @@ export function TrackLane({ width, label, children, style, onPointerDown }: { wi
 
 export type ClipKind = "shape" | "text" | "caption" | "video" | "audio" | "motion";
 
-const KIND: Record<ClipKind, [icon: string, name: string, css: string]> = {
+const KIND: Record<ClipKind, [icon: IconName, name: string, css: string]> = {
   shape: ["shapes", "Shape", "shape"],
   text: ["text", "Text", "text"],
   caption: ["captions", "Subtitles", "caption"],
@@ -116,7 +116,7 @@ export interface ClipProps {
   /** Bar heights 0..1 for the audio waveform. */
   bars?: number[];
   /** Shown with an icon and words, never colour alone. */
-  status?: { icon: string; text: string };
+  status?: { icon: IconName; text: string };
   ariaLabel?: string;
   trimmable?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;

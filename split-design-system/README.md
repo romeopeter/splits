@@ -33,7 +33,7 @@ Split is a desktop video editor for creators: a dark-first workspace where foota
 
 ## Iconography
 
-Use the Split icon set (Icons group) through `Icon`: 24px grid, 1.5px stroke, round caps and joins, outline only except the transport and grip glyphs. Default size is 20px; use 16px in clips and dense rows and 24px in the rail. Icons take `currentColor`: `text-secondary` at rest, `text-primary` on hover, `text-link` when toggled. Never use emoji or a second icon family. An icon alone needs an accessible name from its button.
+Use Phosphor icons (regular weight) through `Icon`, which maps Split icon names to Phosphor glyphs; they share this system's 1.5px look at 24px. The SVGs in Icons are the original set, kept for reference only (decided 2026-11-11). Use outline glyphs everywhere except the transport and grip glyphs, which are filled. Default size is 20px; use 16px in clips and dense rows and 24px in the rail. Icons take `currentColor`: `text-secondary` at rest, `text-primary` on hover, `text-link` when toggled. Never use emoji or a second icon family. An icon alone needs an accessible name from its button.
 
 ## Logo
 

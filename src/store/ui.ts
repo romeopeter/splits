@@ -7,7 +7,11 @@ import type { Ms, Selection } from "../types/project";
 import { loadSettings, saveSettings, type Settings } from "../lib/settings";
 import type { KeyStatus, MotionProgress, Usage, WhisperStatus } from "../lib/ipc";
 
-export type PanelId = "media" | "clip" | "captions" | "motion" | "settings" | "help";
+export type PanelId = "media" | "clip" | "audio" | "captions" | "motion" | "settings" | "help";
+/** Tabs of the Clip panel (a clip on a video track). */
+export type ClipTab = "edit" | "effects" | "cutout" | "audio";
+/** Tabs of the Audio panel (a clip on an audio track). */
+export type AudioTab = "audio" | "edit";
 export type Tool = "select" | "blade";
 
 export interface Notice {
@@ -29,6 +33,9 @@ interface UiState {
   pxPerSecond: number;
   tool: Tool;
   panel: PanelId;
+  /** The tab each panel last showed, kept while the person moves between clips. */
+  clipTab: ClipTab;
+  audioTab: AudioTab;
   selection: Selection;
   settings: Settings;
   liveMessage: string;
@@ -68,6 +75,8 @@ export const useUi = create<UiState>((set, get) => ({
   pxPerSecond: ZOOM_DEFAULT,
   tool: "select",
   panel: "media",
+  clipTab: "edit",
+  audioTab: "audio",
   selection: null,
   settings: loadSettings(),
   liveMessage: "",

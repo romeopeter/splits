@@ -3,7 +3,7 @@
  * Components call these instead of orchestrating IPC themselves.
  */
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import type { Asset, MotionClip, Project, Track, Transcript } from "../types/project";
+import type { Asset, MediaClip, MotionClip, Ms, Project, Track, Transcript } from "../types/project";
 import { getProject, useProject } from "../store/project";
 import { useUi } from "../store/ui";
 import { newId } from "./ids";
@@ -53,7 +53,8 @@ function aspectFor(w: number, h: number) {
   return ASPECTS.reduce((best, a) => (Math.abs(a.width / a.height - r) < Math.abs(best.width / best.height - r) ? a : best));
 }
 
-const MEDIA_EXTENSIONS = ["mp4", "mov", "m4v", "mkv", "webm", "avi", "mts", "mp3", "wav", "m4a", "aac", "flac", "ogg"];
+const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "aac", "flac", "ogg"];
+const MEDIA_EXTENSIONS = ["mp4", "mov", "m4v", "mkv", "webm", "avi", "mts", ...AUDIO_EXTENSIONS];
 
 export async function chooseAndImport(): Promise<void> {
   const picked = await open({ multiple: true, filters: [{ name: "Video and audio", extensions: MEDIA_EXTENSIONS }] });
@@ -61,7 +62,18 @@ export async function chooseAndImport(): Promise<void> {
   await importPaths(Array.isArray(picked) ? picked : [picked]);
 }
 
-export async function importPaths(paths: string[]): Promise<void> {
+/**
+ * The Audio panel's "Add music or sound": audio files only, placed at the
+ * playhead (or after the last clip on the track when that spot is taken),
+ * and the last one selected so its settings show straight away.
+ */
+export async function chooseAndImportAudio(): Promise<void> {
+  const picked = await open({ multiple: true, filters: [{ name: "Audio", extensions: AUDIO_EXTENSIONS }] });
+  if (!picked) return;
+  await importPaths(Array.isArray(picked) ? picked : [picked], { atMs: ui().playheadMs, select: true });
+}
+
+export async function importPaths(paths: string[], opts: { atMs?: Ms; select?: boolean } = {}): Promise<void> {
   for (const path of paths) {
     const ext = path.split(".").pop()?.toLowerCase() ?? "";
     if (!MEDIA_EXTENSIONS.includes(ext)) {
@@ -69,6 +81,7 @@ export async function importPaths(paths: string[]): Promise<void> {
       continue;
     }
     const id = newId("a");
+    let placedId: string | null = null;
     try {
       const info = await ipc.importMedia(id, path);
       const asset: Asset = {
@@ -92,8 +105,11 @@ export async function importPaths(paths: string[]): Promise<void> {
           const fps = asset.fps && asset.fps.num / asset.fps.den <= 60 ? asset.fps : p.settings.fps;
           next = { ...next, settings: { width: a.width, height: a.height, fps } };
         }
-        return placeAsset(next, asset).project;
+        const placed = placeAsset(next, asset, opts.atMs);
+        placedId = placed.clip.id;
+        return placed.project;
       });
+      if (opts.select && placedId) ui().select({ kind: "clip", id: placedId });
       ui().announce(`Added ${asset.name}. Making an editing copy…`);
     } catch (e) {
       ui().notify({ tone: "danger", text: `Could not import ${basename(path)}. ${ipc.errorMessage(e)}` });
@@ -282,6 +298,26 @@ export async function generateMotion(refs: SegmentRef[], prompt: string): Promis
 export function cancelMotion(): void {
   const m = ui().motion;
   if (m) void ipc.cancelJob(m.requestId);
+}
+
+// ---------- Selection ----------
+
+/**
+ * The inspector panel a media clip opens in (editor-patterns: selecting a
+ * clip opens its panel). A clip on an audio track is sound only, so it opens
+ * Audio; everything else opens Clip.
+ */
+export function panelForClip(p: Project, c: MediaClip): "clip" | "audio" {
+  return trackById(p, c.trackId)?.kind === "audio" ? "audio" : "clip";
+}
+
+/** Select a media clip and open its panel. */
+export function selectClip(id: string): void {
+  const p = getProject();
+  const c = p.clips[id];
+  if (!c) return;
+  ui().select({ kind: "clip", id });
+  ui().setPanel(panelForClip(p, c));
 }
 
 // ---------- Editing commands ----------

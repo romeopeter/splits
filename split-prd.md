@@ -45,7 +45,7 @@ All UI is built from the Split design system in [`split-design-system/`](split-d
 ## 🎨 1. UI/UX Interface Layout (4-Quadrant Workspace)
 Region sizes, spacing and behaviour come from [editor-patterns.md](split-design-system/editor-patterns.md) and the [EditorWorkspace](split-design-system/components/EditorWorkspace/) reference screen.
 
-> **As built (provisional, see Open decisions in AGENTS.md):** the workspace follows the design system: top bar, tool rail, inspector, canvas, transport, timeline. The media pool [A] is the **Media** panel in the rail; the Inspector [D] holds the Clip (speed, transform, crop, fades, chroma key, audio), Captions, Motion and Settings panels; selecting a clip opens the Clip panel. Timecode is `hh:mm:ss:ff`. `S` splits at the playhead and `B` is the blade tool. Up and Down jump between edit points; `Q` and `W` ripple trim. The planned layout for the next features is under "Inspector roadmap" below.
+> **As built (provisional, see Open decisions in AGENTS.md):** the workspace follows the design system: top bar, tool rail, inspector, canvas, transport, timeline. The media pool [A] is the **Media** panel in the rail; the rail holds Media, Clip, Audio, Captions and Motion, with Settings and Help at the bottom. Selecting a video clip opens Clip, in tabs: Edit (speed, transform, crop, commands) · Effects (fades) · Cutout (chroma key) · Audio. Selecting a clip on an audio track opens Audio: Audio · Edit. Timecode is `hh:mm:ss:ff`. `S` splits at the playhead and `B` is the blade tool. Up and Down jump between edit points; `Q` and `W` ripple trim. The planned layout for the next features is under "Inspector roadmap" below.
 
 The app must render a fixed, non-scrolling desktop workspace divided into a **4-Quadrant Grid**:
 
@@ -101,7 +101,7 @@ The app must render a fixed, non-scrolling desktop workspace divided into a **4-
 
 ### Feature C2: Core Clip and Track Edits
 * **Requirement:** The everyday edits of a basic editor, on audio and video, all offline and all matched between preview and export.
-* **Clips (Clip panel):**
+* **Clips (Clip and Audio panels):**
   * Speed from 0.25x to 4x, with pitch kept. The source range stays the same; the clip's timeline length changes, and later clips on its track move with its end.
   * Rotation (any angle), horizontal and vertical flip, and crop on each edge.
   * Picture fade in and out, and sound fade in and out, measured from the clip's ends.
@@ -142,7 +142,7 @@ UX is first class (AGENTS.md rule 12). Decided 2026-11-11.
 
 **Phases:**
 1. Edit shortcuts (done).
-2. Inspector restructure and Phosphor icons.
+2. Inspector restructure and Phosphor icons (done).
 3. Text and Emoji.
 4. Audio and Voice.
 5. Adjust.
