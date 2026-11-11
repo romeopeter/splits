@@ -63,7 +63,7 @@ pub fn client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(180))
-        .user_agent(concat!("Splits/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Split/", env!("CARGO_PKG_VERSION")))
         .build()
         .expect("http client")
 }

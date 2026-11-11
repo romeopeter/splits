@@ -15,7 +15,7 @@ import { newId } from "./ids";
 import * as ipc from "./ipc";
 import { LottieRegistry, ensureFonts } from "./lottie";
 import { renderOverlayFrame } from "./overlay";
-import { clipsOnTrack, firstTrackOfKind, placeMotion, placedCaptions, projectDuration, videoTracksBottomUp } from "./timeline";
+import { clipAudible, clipsOnTrack, firstTrackOfKind, placeMotion, placedCaptions, projectDuration, videoTracksBottomUp } from "./timeline";
 import { frameToMs, msToFrame } from "./time";
 
 export type ExportTarget = "mp4" | "motion_mov" | "lottie";
@@ -35,18 +35,31 @@ export function buildExportRequest(p: Project, target: "mp4" | "motion_mov", out
         startMs: c.startMs,
         inMs: c.inMs,
         outMs: c.outMs,
+        speed: c.speed,
         transform: c.transform,
+        crop: c.crop,
         chromaKey: c.chromaKey.enabled ? { color: c.chromaKey.color, similarity: c.chromaKey.similarity, smoothness: c.chromaKey.smoothness } : null,
+        fadeInMs: c.videoFadeInMs,
+        fadeOutMs: c.videoFadeOutMs,
       });
     }
   }
   const audio: ipc.ExportRequestDto["audio"] = [];
   for (const track of p.tracks) {
-    if (track.hidden || (track.kind !== "video" && track.kind !== "audio")) continue;
+    if (track.hidden || track.muted || (track.kind !== "video" && track.kind !== "audio")) continue;
     for (const c of clipsOnTrack(p, track.id)) {
       const a = p.assets[c.assetId];
-      if (!a?.hasAudio || c.volume <= 0) continue;
-      audio.push({ sourcePath: a.path, startMs: c.startMs, inMs: c.inMs, outMs: c.outMs, volume: c.volume });
+      if (!a || !clipAudible(p, c)) continue;
+      audio.push({
+        sourcePath: a.path,
+        startMs: c.startMs,
+        inMs: c.inMs,
+        outMs: c.outMs,
+        speed: c.speed,
+        volume: c.volume,
+        fadeInMs: c.audioFadeInMs,
+        fadeOutMs: c.audioFadeOutMs,
+      });
     }
   }
   return {

@@ -1,5 +1,5 @@
 /**
- * Spits design-system components for React. Avatar, AvatarStack and
+ * Split design-system components for React. Avatar, AvatarStack and
  * CursorLabel are not ported: collaboration is out of scope for version 1.
  */
 export { Icon } from "./Icon";

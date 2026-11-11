@@ -2,51 +2,97 @@
  * The player preview: proxies drawn through the WebGL compositor, with the
  * caption and motion overlay on top, driven by one requestAnimationFrame loop.
  *
- * Playback model: the playhead advances on the wall clock while playing.
- * Each proxy <video> is a decoder we steer: when a clip is under the
- * playhead its element is seeked to the matching source time (and played,
- * re-synced if it drifts more than 120 ms); otherwise it is paused. Audio
- * comes from the same elements.
+ * Each proxy element is a decoder we steer; `Playback` (lib/playback.ts)
+ * decides when each one plays, seeks or pauses, and moves the playhead by the
+ * master element's clock. Audio comes from the same elements. There is one
+ * element per track and asset: a <video> on video tracks, an <audio> on audio
+ * tracks (it plays the proxy's sound without decoding its picture).
+ *
+ * WebKit (macOS) refuses play() without a user gesture once the page has
+ * paused any media, and our play() calls come from the frame loop, not from
+ * the click. An element started inside a real gesture stays allowed, so every
+ * key press or click unlocks the elements that are not unlocked yet.
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useProject, getProject } from "../../store/project";
 import { useUi } from "../../store/ui";
-import { Compositor, placeRect } from "../../lib/compositor";
+import { Compositor, framePointAt, layerGeometry } from "../../lib/compositor";
 import { LottieRegistry, ensureFonts } from "../../lib/lottie";
 import { renderOverlay } from "../../lib/overlay";
-import { clipAt, clipEnd, projectDuration, updateClip, videoTracksBottomUp } from "../../lib/timeline";
-import type { MediaClip, Project } from "../../types/project";
+import { Playback, elementKey } from "../../lib/playback";
+import { clipAt, clipEnd, fadeGain, projectDuration, trackById, updateClip, videoTracksBottomUp } from "../../lib/timeline";
+import type { Project } from "../../types/project";
 
-const DRIFT_MS = 120;
+/** Elements already started inside a user gesture (see the file comment). */
+const unlocked = new WeakSet<HTMLMediaElement>();
 
+/** Play and immediately pause, inside a gesture, so WebKit lets the frame loop play the element later. */
+function unlock(el: HTMLMediaElement) {
+  if (unlocked.has(el) || !el.paused) return;
+  unlocked.add(el);
+  // Chrome rejects the interrupted play() with AbortError, which is fine; only a refusal means still locked.
+  el.play().catch((e: unknown) => {
+    if (e instanceof DOMException && e.name === "NotAllowedError") unlocked.delete(el);
+  });
+  el.pause();
+}
+
+function createElement(tag: "video" | "audio", src: string): HTMLMediaElement {
+  const el = document.createElement(tag);
+  el.preload = "auto";
+  if (el instanceof HTMLVideoElement) el.playsInline = true;
+  el.crossOrigin = "anonymous";
+  el.preservesPitch = true; // speed changes keep voices at their pitch, as the exporter's atempo does
+  el.dataset.src = src;
+  el.src = src;
+  return el;
+}
+
+/** One element per track and asset that has a clip, keyed by `elementKey`. */
 function useMediaElements(project: Project) {
-  const els = useRef(new Map<string, HTMLVideoElement>());
+  const els = useRef(new Map<string, HTMLMediaElement>());
+  const { clips, tracks, assets } = project;
   useEffect(() => {
     const map = els.current;
-    for (const a of Object.values(project.assets)) {
-      if (a.proxy.status !== "ready" || !a.proxy.path) continue;
+    const wanted = new Set<string>();
+    for (const c of Object.values(clips)) {
+      const a = assets[c.assetId];
+      const kind = tracks.find((t) => t.id === c.trackId)?.kind;
+      if (!a || a.proxy.status !== "ready" || !a.proxy.path || (kind !== "video" && kind !== "audio")) continue;
+      const key = elementKey(c);
+      if (wanted.has(key)) continue;
+      wanted.add(key);
       const src = convertFileSrc(a.proxy.path);
-      let el = map.get(a.id);
-      if (!el || el.dataset.src !== src) {
+      const tag = kind === "audio" || !a.hasVideo ? "audio" : "video";
+      const el = map.get(key);
+      if (!el || el.dataset.src !== src || el.tagName.toLowerCase() !== tag) {
         el?.pause();
-        el = document.createElement("video");
-        el.preload = "auto";
-        el.playsInline = true;
-        el.crossOrigin = "anonymous";
-        el.dataset.src = src;
-        el.src = src;
-        map.set(a.id, el);
+        map.set(key, createElement(tag, src));
       }
     }
-    for (const [id, el] of map) {
-      if (!project.assets[id]) {
+    for (const [key, el] of map) {
+      if (!wanted.has(key)) {
         el.pause();
         el.removeAttribute("src");
-        map.delete(id);
+        el.load(); // releases the decoder
+        map.delete(key);
       }
     }
-  }, [project.assets]);
+  }, [clips, tracks, assets]);
+
+  // Unlock new elements on the next key press or click anywhere (capture, so it runs before the Play handler).
+  useEffect(() => {
+    const onGesture = () => {
+      for (const el of els.current.values()) unlock(el);
+    };
+    window.addEventListener("pointerdown", onGesture, true);
+    window.addEventListener("keydown", onGesture, true);
+    return () => {
+      window.removeEventListener("pointerdown", onGesture, true);
+      window.removeEventListener("keydown", onGesture, true);
+    };
+  }, []);
   return els;
 }
 
@@ -94,56 +140,23 @@ export function Preview() {
     void ensureFonts();
     let raf = 0;
     let last = performance.now();
-    const seekTargets = new Map<string, number>();
+    const playback = new Playback();
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const ui = useUi.getState();
       const p = getProject();
-      const dt = now - last;
+      // Cap the step so a stalled frame (a hidden window) does not jump the playhead.
+      const dt = Math.min(now - last, 250);
       last = now;
-      let t = ui.playheadMs;
+      let t = playback.step(p, els.current, { t: ui.playheadMs, dt, playing: ui.playing, speed: ui.speed, volume: ui.previewVolume });
       if (ui.playing) {
-        t += dt * ui.speed;
         const end = projectDuration(p);
         if (t >= end) {
           t = end;
           ui.setPlaying(false);
         }
-        ui.setPlayhead(t);
-      }
-
-      // Which clip drives each asset element right now?
-      const driving = new Map<string, MediaClip>();
-      for (const track of p.tracks) {
-        if (track.hidden || (track.kind !== "video" && track.kind !== "audio")) continue;
-        const c = clipAt(p, track.id, t);
-        if (c && !driving.has(c.assetId)) driving.set(c.assetId, c);
-      }
-      for (const [assetId, el] of els.current) {
-        const c = driving.get(assetId);
-        if (!c) {
-          if (!el.paused) el.pause();
-          continue;
-        }
-        const want = c.inMs + (t - c.startMs);
-        el.volume = Math.min(1, Math.max(0, c.volume * ui.previewVolume));
-        el.playbackRate = ui.speed;
-        if (ui.playing) {
-          if (el.paused) {
-            el.currentTime = want / 1000;
-            void el.play().catch(() => {});
-          } else if (Math.abs(el.currentTime * 1000 - want) > DRIFT_MS) {
-            el.currentTime = want / 1000;
-          }
-        } else {
-          if (!el.paused) el.pause();
-          const prev = seekTargets.get(assetId);
-          if (prev === undefined || Math.abs(prev - want) >= 1) {
-            seekTargets.set(assetId, want);
-            el.currentTime = want / 1000;
-          }
-        }
+        if (t !== ui.playheadMs) ui.setPlayhead(t);
       }
 
       // Video layers, bottom first.
@@ -152,9 +165,10 @@ export function Preview() {
         if (track.hidden) continue;
         const c = clipAt(p, track.id, t);
         const a = c && p.assets[c.assetId];
-        const el = c && els.current.get(c.assetId);
-        if (!c || !a || !el || el.readyState < 2 || !a.hasVideo) continue;
-        comp.draw(el, el.videoWidth || a.width || 16, el.videoHeight || a.height || 9, c.transform, c.chromaKey, p.settings.width, p.settings.height);
+        const el = c && els.current.get(elementKey(c));
+        if (!c || !a || !(el instanceof HTMLVideoElement) || el.readyState < 2 || !a.hasVideo) continue;
+        const fade = fadeGain(c, t, c.videoFadeInMs, c.videoFadeOutMs);
+        comp.draw(el, el.videoWidth || a.width || 16, el.videoHeight || a.height || 9, c, fade, p.settings.width, p.settings.height);
       }
 
       // Captions and motion.
@@ -178,8 +192,10 @@ export function Preview() {
   const playhead = useUi((s) => s.playheadMs);
   const selClip = selection?.kind === "clip" ? project.clips[selection.id] : undefined;
   const selAsset = selClip && project.assets[selClip.assetId];
-  const selVisible = selClip && selAsset?.hasVideo && playhead >= selClip.startMs && playhead < clipEnd(selClip);
-  const rect = selVisible && selAsset ? placeRect(selAsset.width ?? 16, selAsset.height ?? 9, selClip.transform, W, H) : null;
+  const selOnVideo = selClip && trackById(project, selClip.trackId)?.kind === "video";
+  const selVisible = selClip && selOnVideo && selAsset?.hasVideo && playhead >= selClip.startMs && playhead < clipEnd(selClip);
+  const geom = selVisible && selAsset ? layerGeometry(selAsset.width ?? 16, selAsset.height ?? 9, selClip.transform, selClip.crop, W, H) : null;
+  const rect = geom?.rect;
 
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const onBoxDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -215,13 +231,13 @@ export function Preview() {
     const p = getProject();
     const c = p.clips[eyedropper];
     const a = c && p.assets[c.assetId];
-    const el = c && els.current.get(c.assetId);
-    if (!c || !a || !el || !el.videoWidth) return;
+    const el = c && els.current.get(elementKey(c));
+    if (!c || !a || !(el instanceof HTMLVideoElement) || !el.videoWidth) return;
     const r = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - r.left) / r.width) * W;
     const py = ((e.clientY - r.top) / r.height) * H;
-    const rr = placeRect(a.width ?? el.videoWidth, a.height ?? el.videoHeight, c.transform, W, H);
-    if (px < rr.x || py < rr.y || px >= rr.x + rr.w || py >= rr.y + rr.h) {
+    const at = framePointAt(layerGeometry(a.width ?? el.videoWidth, a.height ?? el.videoHeight, c.transform, c.crop, W, H), px, py);
+    if (!at) {
       useUi.getState().announce("Click inside the clip to pick its key colour.");
       return;
     }
@@ -230,8 +246,8 @@ export function Preview() {
     cv.height = el.videoHeight;
     const cx = cv.getContext("2d", { willReadFrequently: true })!;
     cx.drawImage(el, 0, 0);
-    const sx = Math.floor(((px - rr.x) / rr.w) * cv.width);
-    const sy = Math.floor(((py - rr.y) / rr.h) * cv.height);
+    const sx = Math.min(cv.width - 1, Math.floor(at.u * cv.width));
+    const sy = Math.min(cv.height - 1, Math.floor(at.v * cv.height));
     const [R = 0, G = 0, B = 0] = cx.getImageData(sx, sy, 1, 1).data;
     const hex = `#${[R, G, B].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
     useProject.getState().commit((proj) => updateClip(proj, c.id, { chromaKey: { ...c.chromaKey, enabled: true, color: hex } }));
@@ -258,7 +274,15 @@ export function Preview() {
         {rect && !eyedropper && (
           <div
             className="sp-sel"
-            style={{ left: rect.x * scale, top: rect.y * scale, width: rect.w * scale, height: rect.h * scale, cursor: "move", touchAction: "none" }}
+            style={{
+              left: rect.x * scale,
+              top: rect.y * scale,
+              width: rect.w * scale,
+              height: rect.h * scale,
+              transform: selClip?.transform.rotation ? `rotate(${selClip.transform.rotation}deg)` : undefined,
+              cursor: "move",
+              touchAction: "none",
+            }}
             onPointerDown={onBoxDown}
             onPointerMove={onBoxMove}
             onPointerUp={onBoxUp}

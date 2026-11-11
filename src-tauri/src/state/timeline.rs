@@ -27,12 +27,35 @@ pub struct Transform {
     pub scale: f64,
     /// 0.0..=1.0
     pub opacity: f64,
+    /// Degrees clockwise around the clip's centre.
+    #[serde(default)]
+    pub rotation: f64,
+    /// Mirror left to right.
+    #[serde(default)]
+    pub flip_h: bool,
+    /// Mirror top to bottom.
+    #[serde(default)]
+    pub flip_v: bool,
 }
 
 impl Default for Transform {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, scale: 1.0, opacity: 1.0 }
+        Self { x: 0.0, y: 0.0, scale: 1.0, opacity: 1.0, rotation: 0.0, flip_h: false, flip_v: false }
     }
+}
+
+/// Fractions (0.0..1.0) of the source width or height cut off each edge.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Crop {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+fn unit_speed() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,10 +78,21 @@ pub struct VisualClip {
     pub start_ms: u64,
     pub in_ms: u64,
     pub out_ms: u64,
+    /// Playback speed, 0.25..=4.0. The clip lasts `(out_ms - in_ms) / speed` on the timeline.
+    #[serde(default = "unit_speed")]
+    pub speed: f64,
     #[serde(default)]
     pub transform: Transform,
     #[serde(default)]
+    pub crop: Crop,
+    #[serde(default)]
     pub chroma_key: Option<ChromaKey>,
+    /// Fade from transparent over this much timeline time at the clip's start.
+    #[serde(default)]
+    pub fade_in_ms: u64,
+    /// Fade to transparent over this much timeline time at the clip's end.
+    #[serde(default)]
+    pub fade_out_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -68,8 +102,15 @@ pub struct AudioClip {
     pub start_ms: u64,
     pub in_ms: u64,
     pub out_ms: u64,
+    /// Playback speed, 0.25..=4.0; pitch is kept.
+    #[serde(default = "unit_speed")]
+    pub speed: f64,
     /// 0.0..=2.0, 1.0 = unchanged.
     pub volume: f64,
+    #[serde(default)]
+    pub fade_in_ms: u64,
+    #[serde(default)]
+    pub fade_out_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

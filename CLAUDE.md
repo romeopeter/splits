@@ -44,7 +44,19 @@ For any UI work, also read the design-system files listed under "Sources of trut
 
 Before writing or changing the Claude client or the motion prompt, invoke the built-in `claude-api` skill. It has the current model IDs, request shapes and pitfalls. Rust has no official SDK, so follow its raw-HTTP (cURL) shapes. Also read [rust-security](.claude-skills/RUST/rust-security/SKILL.md) (prompt injection, untrusted output, secrets) and [rust-async-tokio](.claude-skills/RUST/rust-async-tokio/SKILL.md) (streaming, cancellation).
 
+## UX first
+
+UX is a first-class requirement here (AGENTS.md rule 12 and "UX standards"). For any task that touches the UI:
+
+1. **Before code:** read the UX standards in AGENTS.md and the design-system files. Write down the user's flow, the states it passes through (empty, loading, error, disabled, success) and the acceptance criteria. Put them in the plan, if there is one.
+2. **While building:**
+   - Put each control in its one home (rail for adding, the selection's inspector tab for properties).
+   - Reuse the shared component.
+   - Give every action a keyboard path and list new shortcuts in `HelpPanel.tsx`.
+3. **Before calling it done:** run the app with the `run` skill and check each acceptance criterion with real footage, including a keyboard-only pass. Passing tests alone does not finish UI work. Say which criteria were checked in the app, and which were not.
+4. **In reviews:** check UX alongside the code, against the same standards.
+
 ## Before finishing a task
 
 - Update `learn/` as AGENTS.md describes, whenever the change adds or alters a concept or decision.
-- If an open decision in AGENTS.md was settled, record the answer there and in `splits-prd.md`.
+- If an open decision in AGENTS.md was settled, record the answer there and in `split-prd.md`.

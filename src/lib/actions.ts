@@ -2,24 +2,35 @@
  * App actions: the glue between UI events, the stores and Rust.
  * Components call these instead of orchestrating IPC themselves.
  */
-import { open } from "@tauri-apps/plugin-dialog";
-import type { Asset, MotionClip, Project, Transcript } from "../types/project";
+import { ask, open } from "@tauri-apps/plugin-dialog";
+import type { Asset, MotionClip, Project, Track, Transcript } from "../types/project";
 import { getProject, useProject } from "../store/project";
 import { useUi } from "../store/ui";
 import { newId } from "./ids";
 import * as ipc from "./ipc";
 import {
-  addClip,
+  adjacentEditPoint,
   clipAt,
+  clipEnd,
+  closeGaps,
   deleteClip,
+  deleteTrack,
+  detachAudio,
   duplicateClip,
-  firstTrackOfKind,
+  editPoints,
+  ensureTrack,
   isLocked,
+  moveTrack,
+  placeAsset,
+  rippleDeleteClip,
+  rippleTrimClip,
   segmentWords,
   splitClip,
-  updateClip,
+  trackById,
+  trackContents,
+  trimClip,
 } from "./timeline";
-import { msToFrame } from "./time";
+import { frameMs, msToFrame, timecode } from "./time";
 
 const ui = () => useUi.getState();
 const commit = (fn: (p: Project) => Project) => useProject.getState().commit(fn);
@@ -54,7 +65,7 @@ export async function importPaths(paths: string[]): Promise<void> {
   for (const path of paths) {
     const ext = path.split(".").pop()?.toLowerCase() ?? "";
     if (!MEDIA_EXTENSIONS.includes(ext)) {
-      ui().notify({ tone: "warning", text: `${basename(path)} is not a video or audio file Splits can open.` });
+      ui().notify({ tone: "warning", text: `${basename(path)} is not a video or audio file Split can open.` });
       continue;
     }
     const id = newId("a");
@@ -81,8 +92,7 @@ export async function importPaths(paths: string[]): Promise<void> {
           const fps = asset.fps && asset.fps.num / asset.fps.den <= 60 ? asset.fps : p.settings.fps;
           next = { ...next, settings: { width: a.width, height: a.height, fps } };
         }
-        const track = firstTrackOfKind(next, asset.hasVideo ? "video" : "audio");
-        return track ? addClip(next, asset, track.id).project : next;
+        return placeAsset(next, asset).project;
       });
       ui().announce(`Added ${asset.name}. Making an editing copy…`);
     } catch (e) {
@@ -148,7 +158,7 @@ export async function transcribe(assetId: string): Promise<void> {
     const t = await ipc.transcribeAsset(jobId, assetId, asset.path, model);
     const transcript: Transcript = { ...t };
     const replaced = Object.values(getProject().motion).some((m) => m.assetId === assetId);
-    commit((proj) => ({ ...proj, transcripts: { ...proj.transcripts, [assetId]: transcript } }));
+    commit((proj) => ensureTrack({ ...proj, transcripts: { ...proj.transcripts, [assetId]: transcript } }, "caption").project);
     ui().announce(`Captions ready: ${transcript.segments.length} segments.`);
     ui().notify({
       tone: replaced ? "warning" : "success",
@@ -213,15 +223,15 @@ export async function generateMotion(refs: SegmentRef[], prompt: string): Promis
       fpsDen: p.settings.fps.den,
       segments: segments.map((s) => ({ segmentId: keyFor(s.ref), words: s.words })),
     });
-    const track = firstTrackOfKind(getProject(), "motion");
     const now = new Date().toISOString();
     const made: MotionClip[] = [];
     for (const r of result.results) {
       const s = segments.find((x) => keyFor(x.ref) === r.segmentId);
-      if (!s || !r.ok || !r.clipId || !r.lottiePath || !r.frames || !track) continue;
+      if (!s || !r.ok || !r.clipId || !r.lottiePath || !r.frames) continue;
       made.push({
         id: r.clipId,
-        trackId: track.id,
+        trackId: "", // set when committed, on the Motion track
+
         assetId: s.ref.assetId,
         segmentId: s.seg.id,
         firstWordId: s.seg.firstWordId,
@@ -237,15 +247,18 @@ export async function generateMotion(refs: SegmentRef[], prompt: string): Promis
       });
     }
     commit((proj) => {
-      const motion = { ...proj.motion };
+      const styles = prompt.trim() ? [prompt.trim(), ...proj.motionStyles.filter((s) => s !== prompt.trim())].slice(0, 8) : proj.motionStyles;
+      if (made.length === 0) return { ...proj, motionStyles: styles };
+      // The Motion track appears with the first motion clip.
+      const { project: base, track } = ensureTrack(proj, "motion");
+      const motion = { ...base.motion };
       for (const m of made) {
         for (const [id, old] of Object.entries(motion)) {
           if (old.assetId === m.assetId && old.segmentId === m.segmentId) delete motion[id];
         }
-        motion[m.id] = m;
+        motion[m.id] = { ...m, trackId: track.id };
       }
-      const styles = prompt.trim() ? [prompt.trim(), ...proj.motionStyles.filter((s) => s !== prompt.trim())].slice(0, 8) : proj.motionStyles;
-      return { ...proj, motion, motionStyles: styles };
+      return { ...base, motion, motionStyles: styles };
     });
     ui().set({ lastUsage: result.usage });
     const failed = result.results.filter((r) => !r.ok);
@@ -348,16 +361,157 @@ export function trimSelectionToPlayhead(edge: "start" | "end"): void {
   commit((p) => {
     const c = p.clips[s.id];
     if (!c || isLocked(p, c.trackId)) return p;
-    const end = c.startMs + (c.outMs - c.inMs);
-    if (t <= c.startMs || t >= end) return p;
-    return edge === "start"
-      ? updateClip(p, c.id, { startMs: t, inMs: c.inMs + (t - c.startMs) })
-      : updateClip(p, c.id, { outMs: c.inMs + (t - c.startMs) });
+    if (t <= c.startMs || t >= clipEnd(c)) return p;
+    return trimClip(p, c.id, edge, t, 0, t);
   });
+}
+
+/**
+ * Q and W: trim the selected clip's start or end to the playhead and close
+ * the gap, so later clips on its track move left. After a start trim the
+ * playhead moves to the clip's start, which is where the cut now is.
+ */
+export function rippleTrimSelectionToPlayhead(edge: "start" | "end"): void {
+  const s = ui().selection;
+  if (s?.kind !== "clip") {
+    ui().announce("Select a clip to trim.");
+    return;
+  }
+  const p = getProject();
+  const c = p.clips[s.id];
+  if (!c) return;
+  const track = trackById(p, c.trackId);
+  if (isLocked(p, c.trackId)) {
+    ui().announce(`${track?.name ?? "This track"} is locked. Unlock it to trim the clip.`);
+    return;
+  }
+  const next = rippleTrimClip(p, c.id, edge, ui().playheadMs);
+  if (next === p) {
+    ui().announce("Move the playhead inside the clip to trim it.");
+    return;
+  }
+  commit(() => next);
+  if (edge === "start") ui().setPlayhead(c.startMs);
+  ui().announce(edge === "start" ? "Trimmed the start and closed the gap." : "Trimmed the end and closed the gap.");
+}
+
+/** Shift+Delete: delete the selected clip and pull later clips on its track left into the gap. */
+export function rippleDeleteSelection(): void {
+  const s = ui().selection;
+  if (s?.kind !== "clip") {
+    deleteSelection();
+    return;
+  }
+  const p = getProject();
+  const c = p.clips[s.id];
+  if (!c || isLocked(p, c.trackId)) return;
+  commit((proj) => rippleDeleteClip(proj, s.id));
+  ui().select(null);
+  ui().announce("Deleted clip and closed the gap.");
+}
+
+/** Pack the clips on a track end to end from the start. */
+export function closeGapsOnTrack(trackId: string): void {
+  const p = getProject();
+  const t = trackById(p, trackId);
+  if (!t || t.locked) return;
+  const next = closeGaps(p, trackId);
+  if (next === p) {
+    ui().announce(`${t.name} has no gaps.`);
+    return;
+  }
+  commit(() => next);
+  ui().announce(`Closed the gaps on ${t.name}.`);
+}
+
+/** Move the selected video clip's sound to its own clip on an audio track. */
+export function detachSelectionAudio(): void {
+  const s = ui().selection;
+  if (s?.kind !== "clip") return;
+  const p = getProject();
+  const c = p.clips[s.id];
+  if (!c || isLocked(p, c.trackId)) return;
+  const r = detachAudio(p, s.id);
+  if (!r.clipId) return;
+  commit(() => r.project);
+  const track = trackById(r.project, r.project.clips[r.clipId]!.trackId);
+  ui().announce(`Audio detached to ${track?.name ?? "an audio track"}. The video clip is muted.`);
+}
+
+/** Alt+Up and Alt+Down on a track header, or dragging its grip. */
+export function moveTrackBy(trackId: string, dir: -1 | 1): void {
+  const p = getProject();
+  const next = moveTrack(p, trackId, dir);
+  if (next === p) return;
+  commit(() => next);
+  const t = trackById(next, trackId);
+  const i = next.tracks.filter((x) => x.kind === t?.kind).findIndex((x) => x.id === trackId);
+  ui().announce(`${t?.name} moved ${dir < 0 ? "up" : "down"}, now ${ordinal(i + 1)} of the ${t?.kind} tracks.`);
+}
+
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
+
+/** Up and Down: move the playhead to the previous or next clip edge on any visible track. */
+export function jumpToEditPoint(dir: -1 | 1): void {
+  const p = getProject();
+  const fps = p.settings.fps;
+  const to = adjacentEditPoint(editPoints(p), ui().playheadMs, dir, frameMs(fps) / 2);
+  if (to === null) {
+    ui().announce(dir < 0 ? "No earlier edit point." : "No later edit point.");
+    return;
+  }
+  ui().setPlayhead(to);
+  ui().announce(`Edit point ${timecode(to, fps)}`);
 }
 
 export function stepFrames(n: number): void {
   const p = getProject();
   const f = msToFrame(ui().playheadMs, p.settings.fps) + n;
   ui().setPlayhead((Math.max(0, f) * 1000 * p.settings.fps.den) / p.settings.fps.num);
+}
+
+// ---------- Tracks ----------
+
+function deleteDetail(t: Track, what: string): string {
+  if (t.kind === "caption") {
+    return "Captions stop showing on the video and in exports. The transcript is kept, so you can add the track back from the Captions panel.";
+  }
+  if (t.kind === "motion") return `Its ${what} will be removed.`;
+  return `Its ${what} will be removed from the timeline. The media stays in the project.`;
+}
+
+/** Delete a track. A track with something on it asks first; either way, undo brings it back. */
+export async function removeTrack(trackId: string): Promise<void> {
+  const p = getProject();
+  const t = trackById(p, trackId);
+  if (!t) return;
+  const what = trackContents(p, t);
+  if (what) {
+    const ok = await ask(`Delete ${t.name}? ${deleteDetail(t, what)} You can undo this.`, {
+      title: "Delete track",
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+  }
+  commit((proj) => deleteTrack(proj, trackId));
+  // Drop a selection that pointed at something on the deleted track.
+  const { selection, eyedropperClipId } = ui();
+  const after = getProject();
+  if (eyedropperClipId && !after.clips[eyedropperClipId]) ui().set({ eyedropperClipId: null });
+  if (
+    (selection?.kind === "clip" && !after.clips[selection.id]) ||
+    (selection?.kind === "motion" && !after.motion[selection.id]) ||
+    (selection?.kind === "segment" && t.kind === "caption")
+  ) {
+    ui().select(null);
+  }
+  ui().announce(`Deleted ${t.name}.`);
+}
+
+/** Put the Captions track back after it was deleted; the transcript was kept. */
+export function addCaptionTrack(): void {
+  commit((p) => ensureTrack(p, "caption").project);
+  ui().announce("Captions track added.");
 }

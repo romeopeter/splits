@@ -171,10 +171,23 @@ export interface ExportRequestDto {
     startMs: number;
     inMs: number;
     outMs: number;
-    transform: { x: number; y: number; scale: number; opacity: number };
+    speed: number;
+    transform: { x: number; y: number; scale: number; opacity: number; rotation: number; flipH: boolean; flipV: boolean };
+    crop: { left: number; top: number; right: number; bottom: number };
     chromaKey: { color: string; similarity: number; smoothness: number } | null;
+    fadeInMs: number;
+    fadeOutMs: number;
   }[];
-  audio: { sourcePath: string; startMs: number; inMs: number; outMs: number; volume: number }[];
+  audio: {
+    sourcePath: string;
+    startMs: number;
+    inMs: number;
+    outMs: number;
+    speed: number;
+    volume: number;
+    fadeInMs: number;
+    fadeOutMs: number;
+  }[];
   overlay: { dir: string; frameCount: number } | null;
 }
 

@@ -1,6 +1,6 @@
 /**
- * Spits controls, rebuilt in React from the design system's bundle.
- * Markup and class names match `spits-design-system/components/bundle.css`,
+ * Split controls, rebuilt in React from the design system's bundle.
+ * Markup and class names match `split-design-system/components/bundle.css`,
  * so the system's CSS styles them unchanged.
  */
 import { useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";

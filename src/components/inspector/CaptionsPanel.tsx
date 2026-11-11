@@ -8,9 +8,9 @@ import { useProject } from "../../store/project";
 import { useUi } from "../../store/ui";
 import { Button, Icon, Panel, PanelRow, PanelSection, Select, Slider } from "../ui";
 import { useGestureEdit } from "../../hooks/useGestureEdit";
-import { editWord, refreshWhisper, transcribe } from "../../lib/actions";
+import { addCaptionTrack, editWord, refreshWhisper, transcribe } from "../../lib/actions";
 import { cancelJob } from "../../lib/ipc";
-import { placedCaptions, segmentWords } from "../../lib/timeline";
+import { firstTrackOfKind, placedCaptions, segmentWords } from "../../lib/timeline";
 import { timecode } from "../../lib/time";
 
 function WordButton({ assetId, id, text }: { assetId: string; id: string; text: string }) {
@@ -106,6 +106,16 @@ export function CaptionsPanel() {
               </Button>
             )}
             <p className="hint">Runs on this computer with whisper.cpp ({model}). Nothing is uploaded.</p>
+            {Object.keys(project.transcripts).length > 0 && !firstTrackOfKind(project, "caption") && (
+              <>
+                <p className="status status--info">
+                  <Icon name="info" size={16} /> Captions are off the timeline.
+                </p>
+                <Button variant="secondary" icon="add" onClick={addCaptionTrack}>
+                  Add captions track
+                </Button>
+              </>
+            )}
           </>
         )}
       </PanelSection>

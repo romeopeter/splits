@@ -67,7 +67,7 @@ pub fn parse_probe(v: &Value) -> AppResult<MediaInfo> {
     });
     let audio = streams.iter().find(|s| s["codec_type"] == "audio");
     if video.is_none() && audio.is_none() {
-        return Err(AppError::Media("This file has no video or audio that Splits can read.".into()));
+        return Err(AppError::Media("This file has no video or audio that Split can read.".into()));
     }
 
     let duration_s = v["format"]["duration"]

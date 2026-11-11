@@ -1,11 +1,22 @@
 /**
- * Global keyboard shortcuts (editor-patterns.md, plus B for the blade).
- * Single-key shortcuts are ignored while typing in a field (WCAG 2.1.4).
+ * Global keyboard shortcuts: editor-patterns.md, plus B and V for tools,
+ * Up and Down for edit points and Q and W for ripple trim (AGENTS.md,
+ * open decision 3). Single-key shortcuts are ignored while typing in a
+ * field (WCAG 2.1.4).
  */
 import { useEffect } from "react";
 import { useProject, getProject } from "../store/project";
 import { useUi } from "../store/ui";
-import { deleteSelection, duplicateSelection, splitAtPlayhead, stepFrames, trimSelectionToPlayhead } from "../lib/actions";
+import {
+  deleteSelection,
+  duplicateSelection,
+  jumpToEditPoint,
+  rippleDeleteSelection,
+  rippleTrimSelectionToPlayhead,
+  splitAtPlayhead,
+  stepFrames,
+  trimSelectionToPlayhead,
+} from "../lib/actions";
 import { projectDuration } from "../lib/timeline";
 
 function typing(t: EventTarget | null): boolean {
@@ -14,6 +25,9 @@ function typing(t: EventTarget | null): boolean {
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
+
+/** Places where Up and Down keep their own meaning. */
+const UP_DOWN_OWNERS = "[role=slider], [role=radio], [role=listbox], [role=option], select, .preview-frame, .track-grip, .inspector, [role=dialog]";
 
 export function useShortcuts() {
   useEffect(() => {
@@ -63,6 +77,23 @@ export function useShortcuts() {
           else stepFrames(dir);
           break;
         }
+        case "ArrowUp":
+        case "ArrowDown":
+          // Up and Down already mean something on sliders, radio groups,
+          // lists, the canvas (nudge) and a track grip (reorder), and they
+          // scroll the inspector and dialogs; leave them alone there.
+          if ((e.target as HTMLElement | null)?.closest(UP_DOWN_OWNERS)) return;
+          e.preventDefault();
+          jumpToEditPoint(e.key === "ArrowUp" ? -1 : 1);
+          break;
+        case "q":
+        case "Q":
+          rippleTrimSelectionToPlayhead("start");
+          break;
+        case "w":
+        case "W":
+          rippleTrimSelectionToPlayhead("end");
+          break;
         case "Home":
           ui.setPlayhead(0);
           break;
@@ -78,7 +109,8 @@ export function useShortcuts() {
         case "Delete":
         case "Backspace":
           e.preventDefault();
-          deleteSelection();
+          if (e.shiftKey) rippleDeleteSelection();
+          else deleteSelection();
           break;
         case "+":
         case "=":
@@ -90,7 +122,7 @@ export function useShortcuts() {
           break;
         case ")":
         case "0":
-          if (e.shiftKey || e.key === ")") window.dispatchEvent(new Event("splits:fit-timeline"));
+          if (e.shiftKey || e.key === ")") window.dispatchEvent(new Event("split:fit-timeline"));
           break;
         case "Escape":
           if (ui.eyedropperClipId) ui.set({ eyedropperClipId: null });

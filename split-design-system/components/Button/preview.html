@@ -1,0 +1,11 @@
+<!-- @dsCard group="Actions" height=150 subtitle="Primary, secondary, ghost and danger at three sizes" -->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;background:var(--bg-panel);color:var(--text-primary);font-family:var(--font-sans)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.col{display:grid;gap:16px}.trio{display:flex;gap:8px}.trio>*{flex:1;min-width:0}
+.lbl{font:500 13px/18px var(--font-sans);color:var(--text-secondary);margin:0 0 8px}
+.foot{background:linear-gradient(135deg,#2b2118,#6a4a2d 55%,#1a1410);border-radius:12px;position:relative}</style></head><body><div id="r" class="sp"></div><script>
+const h=React.createElement,S=window.Split;
+
+ReactDOM.createRoot(document.getElementById('r')).render(h('div',{className:'col'},
+ h('div',{className:'row'}, h(S.Button,{icon:'export'},'Export'), h(S.Button,{variant:'secondary',icon:'share'},'Share'), h(S.Button,{variant:'ghost'},'Cancel'), h(S.Button,{variant:'danger',icon:'trash'},'Delete clip'), h(S.Button,{disabled:true},'Disabled')),
+ h('div',{className:'row'}, h(S.Button,{size:'sm'},'Small 28'), h(S.Button,null,'Medium 36'), h(S.Button,{size:'lg'},'Large 44'), h(S.Button,{variant:'secondary',size:'sm',icon:'split'},'Split'))));
+</script></body></html>

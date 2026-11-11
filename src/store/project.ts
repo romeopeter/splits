@@ -10,7 +10,7 @@
  */
 import { create } from "zustand";
 import type { Asset, Project } from "../types/project";
-import { createProject } from "../lib/timeline";
+import { createProject, normalizeProject } from "../lib/timeline";
 
 const HISTORY_LIMIT = 100;
 
@@ -103,7 +103,7 @@ export const useProject = create<ProjectState>((set, get) => ({
   },
 
   load(p) {
-    set({ project: p, past: [], future: [], gestureStart: null, revision: get().revision + 1 });
+    set({ project: normalizeProject(p), past: [], future: [], gestureStart: null, revision: get().revision + 1 });
   },
 }));
 

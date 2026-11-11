@@ -109,7 +109,7 @@ export function SettingsPanel() {
             <Icon name={message.tone === "success" ? "check" : "alert"} size={16} /> {message.text}
           </p>
         )}
-        <p className="hint">Splits uses your key only for motion, from the app's Rust side. It never reaches the interface, project files or logs.</p>
+        <p className="hint">Split uses your key only for motion, from the app's Rust side. It never reaches the interface, project files or logs.</p>
         <PanelRow label="Model">
           <Select label="Claude model" value={settings.claudeModel} options={CLAUDE_MODELS.map((m) => ({ value: m.value, label: m.label }))} onChange={(v) => update({ claudeModel: v })} />
         </PanelRow>
@@ -130,7 +130,7 @@ export function SettingsPanel() {
             <p className="status status--warning">
               <Icon name="warning" size={16} /> whisper.cpp not found
             </p>
-            <p className="hint">Install it (on macOS: brew install whisper-cpp), or set SPLITS_WHISPER to the whisper-cli binary, then reopen this panel.</p>
+            <p className="hint">Install it (on macOS: brew install whisper-cpp), or set SPLIT_WHISPER to the whisper-cli binary, then reopen this panel.</p>
           </>
         )}
         <PanelRow label="Model">

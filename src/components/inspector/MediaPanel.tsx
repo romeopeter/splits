@@ -2,7 +2,7 @@ import { useProject } from "../../store/project";
 import { useUi } from "../../store/ui";
 import { Button, Icon, Panel, PanelSection } from "../ui";
 import { chooseAndImport, transcribe } from "../../lib/actions";
-import { addClip, firstTrackOfKind } from "../../lib/timeline";
+import { placeAsset } from "../../lib/timeline";
 import { timecode } from "../../lib/time";
 import type { Asset } from "../../types/project";
 
@@ -31,11 +31,7 @@ export function MediaPanel() {
   const transcribing = useUi((s) => s.transcribing);
   const assets = Object.values(project.assets);
 
-  const addToTimeline = (a: Asset) =>
-    useProject.getState().commit((p) => {
-      const t = firstTrackOfKind(p, a.hasVideo ? "video" : "audio");
-      return t ? addClip(p, a, t.id).project : p;
-    });
+  const addToTimeline = (a: Asset) => useProject.getState().commit((p) => placeAsset(p, a).project);
 
   return (
     <Panel title="Media">
@@ -43,7 +39,7 @@ export function MediaPanel() {
         <Button variant="secondary" icon="add" onClick={() => void chooseAndImport()}>
           Add media
         </Button>
-        <p className="hint">Or drop video and audio files anywhere on the window. Splits makes a light editing copy; your originals are never changed.</p>
+        <p className="hint">Or drop video and audio files anywhere on the window. Split makes a light editing copy; your originals are never changed.</p>
       </PanelSection>
       <PanelSection>
         {assets.length === 0 ? (

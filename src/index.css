@@ -1,14 +1,14 @@
 /*
- * Splits styles.
- * 1. Tailwind, with its theme replaced by the Spits design tokens: the
+ * Split styles.
+ * 1. Tailwind, with its theme replaced by the Split design tokens: the
  *    default palette, spacing, radii, shadows and fonts are switched off.
  * 2. The design system's tokens (both themes, @font-face) and component CSS,
  *    imported unchanged.
  * 3. Workspace layout. Every value is a token.
  */
 @import "tailwindcss";
-@import "../spits-design-system/tokens.css";
-@import "../spits-design-system/components/bundle.css";
+@import "../split-design-system/tokens.css";
+@import "../split-design-system/components/bundle.css";
 
 @theme inline {
   --color-*: initial;
@@ -287,6 +287,18 @@ textarea {
 .timeline__row:last-of-type .timeline__corner {
   height: var(--size-track-row);
   border-bottom: 0;
+}
+
+/* Shown instead of tracks until the project has any. Sticky so it stays in view when the ruler scrolls. */
+.timeline__empty {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  max-width: 100%;
+  padding: var(--space-24) var(--space-16);
 }
 
 .timeline__playhead {
@@ -631,4 +643,43 @@ textarea {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/*
+ * Delete track, and Mute while the track is not muted: revealed on hover or
+ * when focus is inside the header (see TrackHeader), so the name keeps its
+ * room at rest. A muted track always shows its struck-through mute button.
+ */
+.sp-track-head .track-delete,
+.sp-track-head .track-mute:not(.track-mute--on) {
+  display: none;
+}
+
+.sp-track-head:hover .track-delete,
+.sp-track-head:focus-within .track-delete,
+.sp-track-head:hover .track-mute,
+.sp-track-head:focus-within .track-mute {
+  display: inline-grid;
+}
+
+/*
+ * Muted track: the design system has no "volume off" icon, so the volume icon
+ * is struck through like the eye-off icon (a shape cue, not colour alone).
+ * The stroke matches the icon set: 1.5px, current colour.
+ */
+.sp-track-head .track-mute--on {
+  position: relative;
+}
+
+.sp-track-head .track-mute--on::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 1.5px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  pointer-events: none;
 }

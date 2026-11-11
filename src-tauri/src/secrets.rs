@@ -8,7 +8,7 @@ use keyring::Entry;
 
 use crate::error::{AppError, AppResult};
 
-const SERVICE: &str = "com.duowork.splits";
+const SERVICE: &str = "com.duowork.split";
 const ACCOUNT: &str = "anthropic-api-key";
 
 fn entry() -> AppResult<Entry> {

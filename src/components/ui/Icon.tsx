@@ -9,7 +9,7 @@ export interface IconProps {
   className?: string;
 }
 
-/** The Spits icon set: 24px grid, 1.5px stroke, `currentColor`. */
+/** The Split icon set: 24px grid, 1.5px stroke, `currentColor`. */
 export function Icon({ name, size = 20, title, strokeWidth = 1.5, className }: IconProps) {
   const [markup, filled] = ICONS[name] ?? ["", 0];
   return (

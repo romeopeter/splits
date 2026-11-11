@@ -1,12 +1,12 @@
 [package]
-name = "splits"
+name = "split"
 version = "0.1.0"
 description = "Local-first desktop video editor"
 edition = "2021"
 rust-version = "1.80"
 
 [lib]
-name = "splits_lib"
+name = "split_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

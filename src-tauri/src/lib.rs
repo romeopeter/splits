@@ -1,4 +1,4 @@
-//! Splits: a local-first desktop video editor.
+//! Split: a local-first desktop video editor.
 //!
 //! Rust owns everything heavy or sensitive: media processing (FFmpeg),
 //! transcription (whisper.cpp), the Claude API key and requests, and export.
@@ -17,7 +17,7 @@ pub mod state;
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("SPLITS_LOG").unwrap_or_else(|_| "splits_lib=info".into()),
+            tracing_subscriber::EnvFilter::try_from_env("SPLIT_LOG").unwrap_or_else(|_| "split_lib=info".into()),
         )
         .init();
 
@@ -47,5 +47,5 @@ pub fn run() {
             commands::export_lottie,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Splits");
+        .expect("error while running Split");
 }

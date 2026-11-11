@@ -16,17 +16,72 @@ export interface TrackHeaderProps {
   hidden: boolean;
   onToggleLock: () => void;
   onToggleHidden: () => void;
+  /**
+   * Adds a "Delete <name>" button. It shows while the header is hovered or
+   * holds focus, so at rest the header matches the design system and the name
+   * keeps its room; Tab from Hide still reaches it.
+   */
+  onDelete?: () => void;
+  /**
+   * Adds a mute toggle (video and audio tracks). The design system has no
+   * "volume off" icon, so a muted track's volume icon is struck through by
+   * CSS, the same cue as the eye when hidden; state is never colour alone.
+   * Like Delete, it is revealed on hover or focus, except while muted.
+   */
+  muted?: boolean;
+  onToggleMuted?: () => void;
+  /**
+   * Makes the grip a reorder handle: drag it, press Up or Down on it, or
+   * press Alt+Up or Alt+Down anywhere in the header (editor-patterns.md).
+   */
+  onMove?: (dir: -1 | 1) => void;
+  onGripPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;
 }
 
-export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden }: TrackHeaderProps) {
+export function TrackHeader({ name, locked, hidden, onToggleLock, onToggleHidden, onDelete, muted, onToggleMuted, onMove, onGripPointerDown }: TrackHeaderProps) {
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!onMove || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const onGrip = (e.target as HTMLElement).classList.contains("track-grip");
+    if (!e.altKey && !onGrip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onMove(e.key === "ArrowUp" ? -1 : 1);
+  };
   return (
-    <div className="sp-track-head" role="group" aria-label={name}>
-      <span className="sp-ibtn sp-ibtn--sm" aria-hidden="true" style={{ cursor: "default" }}>
-        <Icon name="grip" size={16} />
+    <div className="sp-track-head" role="group" aria-label={name} onKeyDown={onKeyDown}>
+      {onMove ? (
+        <button
+          type="button"
+          className="sp-ibtn sp-ibtn--sm track-grip"
+          aria-label={`Move ${name}. Press Up or Down, or drag.`}
+          title="Drag to reorder, or press Alt+Up or Alt+Down"
+          style={{ cursor: "grab", touchAction: "none" }}
+          onPointerDown={onGripPointerDown}
+        >
+          <Icon name="grip" size={16} />
+        </button>
+      ) : (
+        <span className="sp-ibtn sp-ibtn--sm" aria-hidden="true" style={{ cursor: "default" }}>
+          <Icon name="grip" size={16} />
+        </span>
+      )}
+      <span className="sp-track-head__name" title={name}>
+        {name}
       </span>
-      <span className="sp-track-head__name">{name}</span>
+      {onToggleMuted && (
+        <IconButton
+          icon="volume"
+          label={`${muted ? "Unmute" : "Mute"} ${name}`}
+          active={!!muted}
+          size="sm"
+          iconSize={16}
+          className={muted ? "track-mute track-mute--on" : "track-mute"}
+          onClick={onToggleMuted}
+        />
+      )}
       <IconButton icon={locked ? "lock" : "unlock"} label={`${locked ? "Unlock" : "Lock"} ${name}`} active={locked} size="sm" iconSize={16} onClick={onToggleLock} />
       <IconButton icon={hidden ? "eye-off" : "eye"} label={`${hidden ? "Show" : "Hide"} ${name}`} active={hidden} size="sm" iconSize={16} onClick={onToggleHidden} />
+      {onDelete && <IconButton icon="trash" label={`Delete ${name}`} size="sm" iconSize={16} className="track-delete" onClick={onDelete} />}
     </div>
   );
 }

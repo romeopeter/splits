@@ -37,7 +37,7 @@ fn file_name(name: &str) -> String {
 
 pub fn installed_path(app: &AppHandle, name: &str) -> AppResult<Option<PathBuf>> {
     check_name(name)?;
-    if let Ok(p) = std::env::var("SPLITS_WHISPER_MODEL") {
+    if let Ok(p) = std::env::var("SPLIT_WHISPER_MODEL") {
         let p = PathBuf::from(p);
         if p.is_file() {
             return Ok(Some(p));

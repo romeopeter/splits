@@ -75,7 +75,7 @@ function Transport() {
       onStart={() => ui.setPlayhead(0)}
       onEnd={() => ui.setPlayhead(total)}
       onZoom={ui.setZoom}
-      onFit={() => window.dispatchEvent(new Event("splits:fit-timeline"))}
+      onFit={() => window.dispatchEvent(new Event("split:fit-timeline"))}
       onVolume={(v) => ui.set({ previewVolume: v })}
       onSpeed={(s) => ui.set({ speed: parseFloat(s) || 1 })}
     />

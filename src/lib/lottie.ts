@@ -19,9 +19,9 @@
 import lottie from "lottie-web/build/player/lottie_light";
 import type { AnimationItem } from "lottie-web";
 import { readAppFile } from "./ipc";
-import font400 from "../../spits-design-system/fonts/HankenGrotesk-400.woff2?url";
-import font500 from "../../spits-design-system/fonts/HankenGrotesk-500.woff2?url";
-import font700 from "../../spits-design-system/fonts/HankenGrotesk-700.woff2?url";
+import font400 from "../../split-design-system/fonts/HankenGrotesk-400.woff2?url";
+import font500 from "../../split-design-system/fonts/HankenGrotesk-500.woff2?url";
+import font700 from "../../split-design-system/fonts/HankenGrotesk-700.woff2?url";
 
 const dataCache = new Map<string, Promise<unknown>>();
 

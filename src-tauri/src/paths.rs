@@ -1,4 +1,4 @@
-//! Where Splits keeps its files, and the guard that keeps file commands inside them.
+//! Where Split keeps its files, and the guard that keeps file commands inside them.
 //!
 //! Everything lives under the platform app-data directory
 //! (`tauri::path::BaseDirectory::AppData`), never a hard-coded path:
@@ -59,6 +59,6 @@ pub fn ensure_inside(app: &AppHandle, path: &Path) -> AppResult<PathBuf> {
     if resolved.starts_with(&root) {
         Ok(resolved)
     } else {
-        Err(AppError::Invalid("That file is outside the Splits data folder.".into()))
+        Err(AppError::Invalid("That file is outside the Split data folder.".into()))
     }
 }

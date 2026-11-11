@@ -54,10 +54,10 @@ export function PanelRow({ label, inline, children }: { label: string; inline?: 
   );
 }
 
-/** The Spits logo. Ink follows `text-primary`, blue follows `text-link`. */
+/** The Split logo. Ink follows `text-primary`, blue follows `text-link`. */
 export function Logo({ variant = "wordmark", height }: { variant?: "wordmark" | "mark" | "app-icon"; height?: number }) {
   const h = height ?? (variant === "wordmark" ? 36 : 40);
-  const common = { className: "sp-logo", role: "img" as const, "aria-label": "Spits", focusable: "false" as const };
+  const common = { className: "sp-logo", role: "img" as const, "aria-label": "Split", focusable: "false" as const };
   if (variant === "mark")
     return <svg {...common} viewBox="0 0 56 58" height={h} width={(h * 56) / 58} dangerouslySetInnerHTML={{ __html: LOGO.mark }} />;
   if (variant === "app-icon")

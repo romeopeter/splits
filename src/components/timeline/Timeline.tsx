@@ -19,6 +19,7 @@ import {
   clipsOnTrack,
   isLocked,
   moveClip,
+  moveTrack,
   placeMotion,
   placedCaptions,
   projectDuration,
@@ -26,7 +27,7 @@ import {
   trimClip,
   updateTrack,
 } from "../../lib/timeline";
-import { splitClipAt } from "../../lib/actions";
+import { chooseAndImport, moveTrackBy, removeTrack, splitClipAt } from "../../lib/actions";
 import { spokenTime, timecode } from "../../lib/time";
 import type { Asset, MediaClip, Track } from "../../types/project";
 
@@ -80,7 +81,7 @@ function thumbs(asset: Asset, c: MediaClip, width: number, px: number): string[]
   const n = Math.ceil(width / THUMB_W);
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
-    const src = c.inMs + ((i * THUMB_W) / px) * 1000;
+    const src = c.inMs + ((i * THUMB_W) / px) * 1000 * c.speed;
     const idx = Math.min(list.length - 1, Math.max(0, Math.floor(src / interval)));
     out.push(convertFileSrc(list[idx]!));
   }
@@ -127,8 +128,8 @@ export function Timeline() {
       const d = Math.max(5000, projectDuration(getProject()));
       if (el) useUi.getState().setZoom((el.clientWidth - HEADER - 48) / (d / 1000));
     };
-    window.addEventListener("splits:fit-timeline", fit);
-    return () => window.removeEventListener("splits:fit-timeline", fit);
+    window.addEventListener("split:fit-timeline", fit);
+    return () => window.removeEventListener("split:fit-timeline", fit);
   }, []);
 
   const msAt = (clientX: number) => {
@@ -150,6 +151,7 @@ export function Timeline() {
       return;
     }
     ui().select({ kind: "clip", id: c.id });
+    ui().setPanel("clip"); // editor-patterns: selecting a clip opens its panel
     if (locked) return;
     const start0 = c.startMs;
     const kind = trackById(getProject(), c.trackId)?.kind;
@@ -197,7 +199,32 @@ export function Timeline() {
     );
   };
 
-  const toggle = (t: Track, key: "locked" | "hidden") => store().commit((p) => updateTrack(p, t.id, { [key]: !t[key] }));
+  const toggle = (t: Track, key: "locked" | "hidden" | "muted") => store().commit((p) => updateTrack(p, t.id, { [key]: !t[key] }));
+
+  /** Drag a track's grip over another track of the same kind to move it there; one undo step. */
+  const onGripDown = (t: Track, e: RPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    store().beginGesture();
+    drag(
+      e,
+      (_dx, ev) => {
+        const row = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-track-row]");
+        const overId = row?.dataset.trackRow;
+        if (!overId || overId === t.id) return;
+        store().live((p) => {
+          const from = p.tracks.findIndex((x) => x.id === t.id);
+          const to = p.tracks.findIndex((x) => x.id === overId);
+          if (from < 0 || p.tracks[to]?.kind !== t.kind) return p;
+          const dir = to > from ? 1 : -1;
+          let next = p;
+          for (let i = from; i !== to; i += dir) next = moveTrack(next, t.id, dir);
+          return next;
+        });
+      },
+      (moved) => (moved ? store().endGesture() : store().cancelGesture()),
+    );
+  };
 
   const lane = (t: Track) => {
     const dim = t.locked || t.hidden;
@@ -254,11 +281,14 @@ export function Timeline() {
       const w = (clipLength(c) / 1000) * px;
       const sel = selection?.kind === "clip" && selection.id === c.id;
       const pending = a.proxy.status === "pending";
+      // Speed and mute are spelled out in the label, so they never rely on colour.
+      const notes = [c.speed !== 1 && `${Number(c.speed.toFixed(2))}x`, c.muted && a.hasAudio && "muted"].filter(Boolean).join(", ");
+      const name = notes ? `${a.name} · ${notes}` : a.name;
       return (
         <Clip
           key={c.id}
           kind={t.kind === "audio" || !a.hasVideo ? "audio" : "video"}
-          label={pending ? `${a.name} (preparing ${Math.round(a.proxy.progress * 100)}%)` : a.name}
+          label={pending ? `${a.name} (preparing ${Math.round(a.proxy.progress * 100)}%)` : name}
           left={(c.startMs / 1000) * px}
           width={w}
           selected={sel}
@@ -267,10 +297,14 @@ export function Timeline() {
           thumbnails={a.hasVideo && t.kind === "video" ? thumbs(a, c, w, px) : undefined}
           bars={t.kind === "audio" || !a.hasVideo ? bars(a, c, w) : undefined}
           status={a.proxy.status === "failed" ? { icon: "alert", text: "Not ready" } : undefined}
-          ariaLabel={`${a.hasVideo && t.kind === "video" ? "Video" : "Audio"} clip, ${a.name}, ${timecode(c.startMs, fps)} to ${timecode(clipEnd(c), fps)}`}
+          ariaLabel={`${a.hasVideo && t.kind === "video" ? "Video" : "Audio"} clip, ${name}, ${timecode(c.startMs, fps)} to ${timecode(clipEnd(c), fps)}`}
           style={tool === "blade" ? { cursor: "crosshair" } : undefined}
           onPointerDown={(e) => onMediaDown(c, e)}
-          onClick={() => tool === "select" && ui().select({ kind: "clip", id: c.id })}
+          onClick={() => {
+            if (tool !== "select") return;
+            ui().select({ kind: "clip", id: c.id });
+            ui().setPanel("clip");
+          }}
           onTrimPointerDown={(edge, e) => onTrimDown(c, edge, e)}
         />
       );
@@ -296,10 +330,33 @@ export function Timeline() {
               onScrubStart={() => ui().setPlaying(false)}
             />
           </div>
-          {project.tracks.map((t) => (
-            <div className="timeline__row" key={t.id}>
+          {project.tracks.length === 0 && (
+            // Kept in view while the ruler scrolls sideways.
+            <div className="timeline__empty" style={{ width: viewWidth || undefined }}>
+              <p className="hint">Drop a clip here, or choose Add media.</p>
+              <Button variant="secondary" size="sm" icon="add" onClick={() => void chooseAndImport()}>
+                Add media
+              </Button>
+            </div>
+          )}
+          {project.tracks.map((t) => {
+            const media = t.kind === "video" || t.kind === "audio";
+            const movable = project.tracks.filter((x) => x.kind === t.kind).length > 1;
+            return (
+            <div className="timeline__row" key={t.id} data-track-row={t.id}>
               <div className="timeline__header">
-                <TrackHeader name={t.name} locked={t.locked} hidden={t.hidden} onToggleLock={() => toggle(t, "locked")} onToggleHidden={() => toggle(t, "hidden")} />
+                <TrackHeader
+                  name={t.name}
+                  locked={t.locked}
+                  hidden={t.hidden}
+                  onToggleLock={() => toggle(t, "locked")}
+                  onToggleHidden={() => toggle(t, "hidden")}
+                  onDelete={() => void removeTrack(t.id)}
+                  muted={t.muted}
+                  onToggleMuted={media ? () => toggle(t, "muted") : undefined}
+                  onMove={movable ? (dir) => moveTrackBy(t.id, dir) : undefined}
+                  onGripPointerDown={movable ? (e) => onGripDown(t, e) : undefined}
+                />
               </div>
               <div data-track-id={t.id}>
                 <TrackLane
@@ -313,7 +370,8 @@ export function Timeline() {
                 </TrackLane>
               </div>
             </div>
-          ))}
+            );
+          })}
           <div className="timeline__row">
             <div className="timeline__corner">
               <Button variant="ghost" size="sm" icon="plus" onClick={() => store().commit((p) => addTrack(p, "audio"))}>

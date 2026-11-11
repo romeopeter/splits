@@ -57,7 +57,7 @@ export function MotionPanel() {
       <Panel title="Motion">
         <PanelSection>
           <p className="panel-lead">Animate your captions from a style you describe.</p>
-          <p className="hint">Motion uses Claude with your own Anthropic API key. Connect it in Settings to start. Everything else in Splits works offline.</p>
+          <p className="hint">Motion uses Claude with your own Anthropic API key. Connect it in Settings to start. Everything else in Split works offline.</p>
           <Button variant="secondary" icon="settings" onClick={() => useUi.getState().setPanel("settings")}>
             Open settings
           </Button>
@@ -87,7 +87,7 @@ export function MotionPanel() {
             <Icon name="info" size={16} /> What is sent
           </p>
           <p className="hint">
-            For each segment, Splits sends Claude the transcript words, their timings, the canvas size and frame rate, and your style prompt. Never your video, audio or file names.
+            For each segment, Split sends Claude the transcript words, their timings, the canvas size and frame rate, and your style prompt. Never your video, audio or file names.
           </p>
           <Button variant="ghost" size="sm" onClick={() => useUi.getState().updateSettings({ motionNoticeSeen: true })}>
             Got it

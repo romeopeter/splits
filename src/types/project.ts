@@ -46,7 +46,10 @@ export interface Track {
   kind: TrackKind;
   name: string;
   locked: boolean;
+  /** Hidden tracks are neither seen nor heard. */
   hidden: boolean;
+  /** Muted tracks are still seen (video) but not heard. */
+  muted: boolean;
 }
 
 export interface Transform {
@@ -57,6 +60,20 @@ export interface Transform {
   scale: number;
   /** 0..1 */
   opacity: number;
+  /** Degrees clockwise around the clip's centre. */
+  rotation: number;
+  /** Mirror left to right. */
+  flipH: boolean;
+  /** Mirror top to bottom. */
+  flipV: boolean;
+}
+
+/** Fractions of the source width or height cut off each edge, before fitting. */
+export interface Crop {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 export interface ChromaKey {
@@ -69,7 +86,13 @@ export interface ChromaKey {
   smoothness: number;
 }
 
-/** A clip of an asset on a video or audio track. */
+/**
+ * A clip of an asset on a video or audio track.
+ *
+ * `inMs`..`outMs` is the source range; at `speed` 2 it plays in half that
+ * time, so the clip's length on the timeline is `(outMs - inMs) / speed`
+ * (see `clipLength`). Fades are timeline time, measured from the clip's ends.
+ */
 export interface MediaClip {
   id: string;
   trackId: string;
@@ -79,10 +102,20 @@ export interface MediaClip {
   /** Source range used. */
   inMs: Ms;
   outMs: Ms;
+  /** Playback speed, `MIN_SPEED`..`MAX_SPEED`, 1 = unchanged. Audio keeps its pitch. */
+  speed: number;
   transform: Transform;
+  crop: Crop;
   chromaKey: ChromaKey;
   /** 0..2, 1 = unchanged. */
   volume: number;
+  /** Silenced without losing `volume` (also set when the audio is detached to its own clip). */
+  muted: boolean;
+  /** Picture fades from and to transparent (black when nothing is below). */
+  videoFadeInMs: Ms;
+  videoFadeOutMs: Ms;
+  audioFadeInMs: Ms;
+  audioFadeOutMs: Ms;
 }
 
 export interface Word {

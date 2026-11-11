@@ -10,19 +10,30 @@
  *   diff  = sqrt((Δcb² + Δcr²) / 2)                 (BT.601 chroma, 0..1)
  *   alpha = smoothness > 0 ? clamp((diff − similarity) / smoothness, 0, 1)
  *                          : diff > similarity ? 1 : 0
+ *
+ * Crop and flip choose which part of the texture the quad samples (`u_uv`);
+ * rotation turns the quad's corners around its centre. The exporter does
+ * the same with FFmpeg's crop, hflip/vflip and rotate filters, in that order
+ * (see `layerGeometry` and exporter.rs).
  */
-import type { ChromaKey, Transform } from "../types/project";
+import type { ChromaKey, Crop, Transform } from "../types/project";
+import { croppedSize } from "./timeline";
 
 const VERT = `
 attribute vec2 a_pos;
-uniform vec4 u_rect;      // x, y, w, h in project pixels
+uniform vec4 u_rect;      // x, y, w, h in project pixels, before rotation
+uniform float u_rot;      // radians, clockwise on screen
+uniform vec4 u_uv;        // texture u0, v0, u1, v1 after crop and flip
 uniform vec2 u_project;   // project width, height
 varying vec2 v_uv;
 void main() {
-  vec2 p = u_rect.xy + a_pos * u_rect.zw;
+  vec2 local = (a_pos - 0.5) * u_rect.zw;
+  float c = cos(u_rot);
+  float s = sin(u_rot);
+  vec2 p = u_rect.xy + 0.5 * u_rect.zw + vec2(local.x * c - local.y * s, local.x * s + local.y * c);
   vec2 ndc = vec2(p.x / u_project.x * 2.0 - 1.0, 1.0 - p.y / u_project.y * 2.0);
   gl_Position = vec4(ndc, 0.0, 1.0);
-  v_uv = a_pos;
+  v_uv = mix(u_uv.xy, u_uv.zw, a_pos);
 }`;
 
 const FRAG = `
@@ -60,8 +71,8 @@ export function keyUV(hex: string): [number, number] {
   return [-0.168736 * r - 0.331264 * g + 0.5 * b + 0.5, 0.5 * r - 0.418688 * g - 0.081312 * b + 0.5];
 }
 
-/** Same placement as `exporter::placement` in Rust. */
-export function placeRect(srcW: number, srcH: number, t: Transform, W: number, H: number) {
+/** Same placement as `exporter::placement` in Rust. `srcW`/`srcH` are the size after cropping. */
+export function placeRect(srcW: number, srcH: number, t: Pick<Transform, "x" | "y" | "scale">, W: number, H: number) {
   const fit = Math.min(W / Math.max(1, srcW), H / Math.max(1, srcH)) * Math.max(0.01, t.scale);
   const even = (v: number) => {
     const r = Math.max(2, Math.round(v));
@@ -70,6 +81,47 @@ export function placeRect(srcW: number, srcH: number, t: Transform, W: number, H
   const w = even(srcW * fit);
   const h = even(srcH * fit);
   return { x: Math.round((W - w) / 2 + t.x), y: Math.round((H - h) / 2 + t.y), w, h };
+}
+
+export interface LayerGeometry {
+  /** Placed rectangle in project pixels, before rotation. */
+  rect: { x: number; y: number; w: number; h: number };
+  /** Rotation in radians, clockwise. */
+  rot: number;
+  /** Texture coordinates of the rect's top-left (u0, v0) and bottom-right (u1, v1) corners. */
+  uv: [number, number, number, number];
+}
+
+/** Where a clip lands on the canvas and which part of its frame it shows. */
+export function layerGeometry(srcW: number, srcH: number, t: Transform, crop: Crop, W: number, H: number): LayerGeometry {
+  const size = croppedSize(srcW, srcH, crop);
+  const rect = placeRect(size.w, size.h, t, W, H);
+  let [u0, u1] = [crop.left, 1 - crop.right];
+  let [v0, v1] = [crop.top, 1 - crop.bottom];
+  if (t.flipH) [u0, u1] = [u1, u0];
+  if (t.flipV) [v0, v1] = [v1, v0];
+  return { rect, rot: (t.rotation * Math.PI) / 180, uv: [u0, v0, u1, v1] };
+}
+
+/** The frame coordinates (0..1) under a canvas point, or null when the point is outside the clip. */
+export function framePointAt(g: LayerGeometry, px: number, py: number): { u: number; v: number } | null {
+  const { rect: r, rot, uv } = g;
+  const dx = px - (r.x + r.w / 2);
+  const dy = py - (r.y + r.h / 2);
+  // Undo the rotation, then find the point inside the unrotated rect.
+  const lx = dx * Math.cos(rot) + dy * Math.sin(rot);
+  const ly = -dx * Math.sin(rot) + dy * Math.cos(rot);
+  const a = lx / r.w + 0.5;
+  const b = ly / r.h + 0.5;
+  if (a < 0 || a >= 1 || b < 0 || b >= 1) return null;
+  return { u: uv[0] + (uv[2] - uv[0]) * a, v: uv[1] + (uv[3] - uv[1]) * b };
+}
+
+/** What `Compositor.draw` needs from a clip. */
+export interface Layer {
+  transform: Transform;
+  crop: Crop;
+  chromaKey: ChromaKey;
 }
 
 export class Compositor {
@@ -94,7 +146,7 @@ export class Compositor {
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "link error");
     gl.useProgram(prog);
-    for (const n of ["u_rect", "u_project", "u_tex", "u_opacity", "u_key", "u_keyUV", "u_similarity", "u_smoothness"]) {
+    for (const n of ["u_rect", "u_rot", "u_uv", "u_project", "u_tex", "u_opacity", "u_key", "u_keyUV", "u_similarity", "u_smoothness"]) {
       this.loc[n] = gl.getUniformLocation(prog, n);
     }
     const buf = gl.createBuffer();
@@ -121,9 +173,12 @@ export class Compositor {
     gl.uniform2f(this.loc.u_project!, projectW, projectH);
   }
 
-  draw(source: TexImageSource, srcW: number, srcH: number, t: Transform, key: ChromaKey | null, W: number, H: number) {
+  /** Draw one layer. `alpha` multiplies the clip's opacity (the video fade). */
+  draw(source: TexImageSource, srcW: number, srcH: number, layer: Layer, alpha: number, W: number, H: number) {
     const { gl } = this;
-    const r = placeRect(srcW, srcH, t, W, H);
+    const { transform: t, chromaKey: key } = layer;
+    const g = layerGeometry(srcW, srcH, t, layer.crop, W, H);
+    const r = g.rect;
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     try {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
@@ -131,9 +186,11 @@ export class Compositor {
       return; // frame not decodable yet
     }
     gl.uniform4f(this.loc.u_rect!, r.x, r.y, r.w, r.h);
-    gl.uniform1f(this.loc.u_opacity!, Math.min(1, Math.max(0, t.opacity)));
-    gl.uniform1i(this.loc.u_key!, key?.enabled ? 1 : 0);
-    if (key?.enabled) {
+    gl.uniform1f(this.loc.u_rot!, g.rot);
+    gl.uniform4f(this.loc.u_uv!, ...g.uv);
+    gl.uniform1f(this.loc.u_opacity!, Math.min(1, Math.max(0, t.opacity * alpha)));
+    gl.uniform1i(this.loc.u_key!, key.enabled ? 1 : 0);
+    if (key.enabled) {
       const [u, v] = keyUV(key.color);
       gl.uniform2f(this.loc.u_keyUV!, u, v);
       gl.uniform1f(this.loc.u_similarity!, Math.max(0.001, key.similarity));

@@ -143,7 +143,7 @@ pub async fn motion_generate(
     result
 }
 
-/// Read a file Splits wrote (motion JSON), refusing anything outside app data.
+/// Read a file Split wrote (motion JSON), refusing anything outside app data.
 #[tauri::command]
 pub fn read_app_file(app: AppHandle, path: String) -> AppResult<String> {
     let p = paths::ensure_inside(&app, &PathBuf::from(path))?;

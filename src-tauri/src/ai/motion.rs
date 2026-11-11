@@ -159,7 +159,7 @@ fn repair_prompt(req: &MotionRequest, failed: &[(&MotionSegment, Value, Vec<Stri
     }
     let style = if req.style_prompt.trim().is_empty() { "Clean kinetic captions." } else { req.style_prompt.trim() };
     format!(
-        "<style>\n{style}\n</style>\n\n{}\n\nThese animations failed validation in Splits. Fix every listed error and return all of them in the usual envelope. Keep the design otherwise the same.\n\n{}",
+        "<style>\n{style}\n</style>\n\n{}\n\nThese animations failed validation in Split. Fix every listed error and return all of them in the usual envelope. Keep the design otherwise the same.\n\n{}",
         canvas_line(req),
         parts.join("\n\n")
     )

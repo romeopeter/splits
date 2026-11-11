@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   motionNoticeSeen: false,
 };
 
-const KEY = "splits.settings";
+const KEY = "split.settings";
 
 export function loadSettings(): Settings {
   try {

@@ -8,10 +8,10 @@ use serde::ser::SerializeStruct;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("FFmpeg was not found. Install FFmpeg, or set SPLITS_FFMPEG and SPLITS_FFPROBE to its binaries.")]
+    #[error("FFmpeg was not found. Install FFmpeg, or set SPLIT_FFMPEG and SPLIT_FFPROBE to its binaries.")]
     FfmpegMissing,
 
-    #[error("whisper.cpp was not found. Install it (for example `brew install whisper-cpp`), or set SPLITS_WHISPER to the whisper-cli binary.")]
+    #[error("whisper.cpp was not found. Install it (for example `brew install whisper-cpp`), or set SPLIT_WHISPER to the whisper-cli binary.")]
     WhisperMissing,
 
     #[error("The {0} transcription model is not installed. Download it in Settings.")]

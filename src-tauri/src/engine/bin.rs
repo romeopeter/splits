@@ -1,4 +1,4 @@
-//! Finding the external binaries Splits drives: ffmpeg, ffprobe and whisper-cli.
+//! Finding the external binaries Split drives: ffmpeg, ffprobe and whisper-cli.
 //!
 //! Lookup order: an environment override, a sidecar next to the app executable,
 //! then PATH plus the usual package-manager folders. The last step matters on
@@ -58,13 +58,13 @@ pub fn find(env_var: &str, names: &[&str]) -> Option<PathBuf> {
 }
 
 pub fn ffmpeg() -> AppResult<PathBuf> {
-    find("SPLITS_FFMPEG", &["ffmpeg"]).ok_or(AppError::FfmpegMissing)
+    find("SPLIT_FFMPEG", &["ffmpeg"]).ok_or(AppError::FfmpegMissing)
 }
 
 pub fn ffprobe() -> AppResult<PathBuf> {
-    find("SPLITS_FFPROBE", &["ffprobe"]).ok_or(AppError::FfmpegMissing)
+    find("SPLIT_FFPROBE", &["ffprobe"]).ok_or(AppError::FfmpegMissing)
 }
 
 pub fn whisper() -> AppResult<PathBuf> {
-    find("SPLITS_WHISPER", &["whisper-cli", "whisper-cpp", "whisper"]).ok_or(AppError::WhisperMissing)
+    find("SPLIT_WHISPER", &["whisper-cli", "whisper-cpp", "whisper"]).ok_or(AppError::WhisperMissing)
 }
